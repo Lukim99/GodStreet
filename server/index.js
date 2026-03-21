@@ -5,7 +5,9 @@ import { createInitialGameState, actions, finalizeGameState, sanitizeStateForPla
 const PORT = process.env.PORT || 8080;
 const httpServer = createServer();
 const io = new Server(httpServer, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
+  cors: { origin: '*', methods: ['GET', 'POST'],
+  pingInterval: 10000,
+  pingTimeout: 5000 },
 });
 
 const rooms = new Map();
