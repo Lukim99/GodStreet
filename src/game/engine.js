@@ -693,6 +693,7 @@ const applyMomentumCounter = (game) => {
     players: removeCardFromHand(game.players, game.counterPlayerIndex, momentumCardId),
     discardPile: [...game.discardPile, momentumCardId],
     selectedCardDetailId: momentumCardId,
+    lastCounterCard: { cardId: momentumCardId, playerIndex: game.counterPlayerIndex, playerName: counterName },
     pendingCardAction: {
       ...game.pendingCardAction,
       momentumTrade: {
