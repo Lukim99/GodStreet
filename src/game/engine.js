@@ -221,6 +221,9 @@ export const drawCardsForPlayer = (players, deck, discardPile, playerIndex, amou
   let nextDiscardPile = [...discardPile];
 
   for (let count = 0; count < amount; count += 1) {
+    const currentHand = nextPlayers[playerIndex]?.hand || [];
+    if (currentHand.length >= 8) break;
+
     if (nextDeck.length === 0 && nextDiscardPile.length > 0) {
       nextDeck = shuffleArray(nextDiscardPile);
       nextDiscardPile = [];
@@ -796,15 +799,18 @@ const startNextTurn = (state, nextPlayerIndex, baseMessage) => {
 
   if (nextRoundNumber > state.roundNumber) {
     const roundShockPercent = getRandomPercentBetween(-10, 10);
+    const direction = roundShockPercent > 0 ? 'up' : 'down';
+    const multiplier = direction === 'up' ? nextState.riseMultiplier : nextState.fallMultiplier;
+    const effectivePercent = roundShockPercent * multiplier;
     nextState = applyMarketMoveToState(
       nextState,
-      nextState.price * (1 + roundShockPercent / 100),
+      nextState.price * (1 + effectivePercent / 100),
       '라운드 변동성',
-      { phase: 'round_cycle', percent: roundShockPercent, roundNumber: nextRoundNumber }
+      { phase: 'round_cycle', percent: effectivePercent, roundNumber: nextRoundNumber }
     );
     nextState = {
       ...nextState,
-      statusMessage: `${nextRoundNumber}바퀴 시작! 라운드 변동성 ${formatSignedPercent(roundShockPercent)} 후 ${nextState.players[resolvedNextPlayerIndex].name} 차례입니다.`,
+      statusMessage: `${nextRoundNumber}라운드 시작! 주가가 ${formatSignedPercent(effectivePercent)} 변동되었으며 ${nextState.players[resolvedNextPlayerIndex].name} 차례입니다.`,
     };
   }
 

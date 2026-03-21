@@ -1,21 +1,52 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatMessages, onCreateRoom, onJoinRoom, onStartGame, onToggleReady, onSendChatMessage, onLeaveRoom }) {
   const [playerName, setPlayerName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [view, setView] = useState('main');
-  const [resultModalOpen, setResultModalOpen] = useState(true);
+  const [resultModalOpen, setResultModalOpen] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [maxRounds, setMaxRounds] = useState(10);
   const [startingCash, setStartingCash] = useState(10000);
   const [startingPrice, setStartingPrice] = useState(100);
   const [targetCash, setTargetCash] = useState(100000);
+  const prevResultRef = useRef(null);
+  const chatMessagesRef = useRef(null);
+  const [playerBubbles, setPlayerBubbles] = useState({});
 
   useEffect(() => {
-    if (!roomInfo?.lastResult) return;
-    const timer = setTimeout(() => setResultModalOpen(true), 0);
-    return () => clearTimeout(timer);
+    if (!roomInfo?.lastResult) {
+      prevResultRef.current = null;
+      return;
+    }
+    if (prevResultRef.current !== roomInfo.lastResult) {
+      prevResultRef.current = roomInfo.lastResult;
+      queueMicrotask(() => setResultModalOpen(true));
+    }
   }, [roomInfo?.lastResult]);
+
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
+
+  useEffect(() => {
+    if (!chatMessages.length || !roomInfo) return;
+    const lastMsg = chatMessages[chatMessages.length - 1];
+    const playerIdx = roomInfo.players.findIndex(p => p.name === lastMsg.sender);
+    if (playerIdx === -1) return;
+    
+    queueMicrotask(() => setPlayerBubbles(prev => ({ ...prev, [playerIdx]: lastMsg.text })));
+    const timer = setTimeout(() => {
+      setPlayerBubbles(prev => {
+        const next = { ...prev };
+        delete next[playerIdx];
+        return next;
+      });
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [chatMessages, roomInfo]);
 
   if (roomInfo) {
     const isHost = myPlayerIndex === 0;
@@ -86,6 +117,7 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
                     <div className={`player-card__status ${statusClass}`}>{statusText}</div>
                     <img src="/symbols/lobby.png" alt="avatar" className="player-card__avatar" />
                     {isMe && <span className="player-card__diamond">♦</span>}
+                    {playerBubbles[i] && <div className="player-card__bubble">{playerBubbles[i]}</div>}
                   </div>
                 );
               })}
@@ -95,7 +127,7 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
             </div>
             <div className="lobby-chat">
               <div className="lobby-chat__label">채팅</div>
-              <div className="lobby-chat__messages">
+              <div className="lobby-chat__messages" ref={chatMessagesRef}>
                 {chatMessages.map((msg, idx) => (
                   <div key={idx} className="lobby-chat__msg">
                     {msg.sender}: {msg.text}
