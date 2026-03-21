@@ -2,7 +2,7 @@ import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { CARD_MAP } from '../game/cardLibrary';
 import { getPlayerMetrics, formatSignedCurrency, formatSignedPercent } from '../game/engine';
 import { CARD_TYPES, COUNTER_CARD_EFFECTS, TURN_PHASES } from '../game/constants';
-import { playSound, playSoundForPriceChange } from '../utils/sound';
+import { playSound, playSoundForPriceChange, playStartSound, startBgm, stopBgm } from '../utils/sound';
 
 const MAX_HAND = 8;
 const PHASE_LABEL = { CARD: '카드 턴', COUNTER: '카운터 턴', TRADE: '매매 턴' };
@@ -103,13 +103,14 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
   const [playerAnimations, setPlayerAnimations] = useState({});
   const lastPriceMoveRef = useRef(null);
   const prevPlayersRef = useRef(game.players);
+  const prevPlayedCardsLenRef = useRef(0);
+  const bgmStartedRef = useRef(false);
 
   const me = game.players[myPlayerIndex];
   const currentPlayer = game.players[game.currentPlayerIndex];
   const targetPlayer = game.players.find((p) => p.id === game.selectedTargetPlayerId);
   const selectedCard = game.selectedCardDetailId ? CARD_MAP[game.selectedCardDetailId] : null;
   const displayCard = hoveredCard || selectedCard;
-  const pendingCard = game.pendingCardAction ? CARD_MAP[game.pendingCardAction.cardId] : null;
 
   const isMyTurn = myPlayerIndex === game.currentPlayerIndex;
   const isMyCounter = myPlayerIndex === game.counterPlayerIndex;
@@ -198,6 +199,30 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
     }
   }, [canTrade, game.turnPhase, isMyTurn, me.activeEffects, act]);
 
+  useEffect(() => {
+    if (!bgmStartedRef.current) {
+      bgmStartedRef.current = true;
+      playStartSound();
+      const bgmTimer = setTimeout(() => startBgm(), 1500);
+      return () => clearTimeout(bgmTimer);
+    }
+    return undefined;
+  }, []);
+
+  useEffect(() => {
+    if (game.gameOver) {
+      stopBgm();
+    }
+  }, [game.gameOver]);
+
+  useEffect(() => {
+    const currentLen = game.turnPlayedCards?.length || 0;
+    if (currentLen > prevPlayedCardsLenRef.current) {
+      playSound('pop');
+    }
+    prevPlayedCardsLenRef.current = currentLen;
+  }, [game.turnPlayedCards]);
+
   const emptySlots = Math.max(0, MAX_HAND - displayHand.length);
   const maxBuyQty = game.price > 0 ? Math.floor(me.cash / game.price) : 0;
 
@@ -215,8 +240,7 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
       {/* ====== LEFT COLUMN ====== */}
       <div className="board__left">
         <div className="status-bar">
-          <span className="status-bar__message">{game.statusMessage}</span>
-          <span className="status-bar__round">{Math.min(game.roundNumber, game.maxRounds)}/{game.maxRounds}</span>
+          <span className="status-bar__round">{Math.min(game.roundNumber, game.maxRounds)}/{game.maxRounds} 라운드</span>
         </div>
         {/* Top row: chart + price */}
         <div className="top-row">
@@ -256,17 +280,57 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
         <div className="table-area">
           <div className="table-area__current">{currentPlayer.name}</div>
           <div className="table-area__target">{targetPlayer?.name ?? ''}</div>
-          <div className="table-area__center">
-            {pendingCard ? (
-              <div className="played-card">
-                <div className="played-card__name">{pendingCard.name}</div>
-                <div className="played-card__desc">{pendingCard.description}</div>
-              </div>
-            ) : (
-              <div className="played-card played-card--empty">
-                <div className="played-card__name">행동 대기</div>
-              </div>
-            )}
+          
+          {/* Left side: played cards this turn */}
+          <div className="table-area__left">
+            {(game.turnPlayedCards || []).map((cardId, idx) => {
+              const card = CARD_MAP[cardId];
+              if (!card) return null;
+              const typeClass = {
+                [CARD_TYPES.ATTACK]: 'hc--attack',
+                [CARD_TYPES.COUNTER]: 'hc--counter',
+                [CARD_TYPES.FREE]: 'hc--free',
+                [CARD_TYPES.BLACK_SWAN]: 'hc--black-swan',
+              }[card.type] || '';
+              const typeSymbol = CARD_TYPE_SYMBOLS[card.type];
+              return (
+                <div
+                  key={`played-${idx}`}
+                  className={`hc hc--table ${typeClass}`}
+                  onMouseEnter={() => setHoveredCard(card)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                >
+                  <span className="hc__top">
+                    {typeSymbol ? <span className="hc__icon" style={{ '--hc-icon': `url(${typeSymbol})` }} /> : null}
+                  </span>
+                  <span className="hc__name">{card.name}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Right side: counter card */}
+          <div className="table-area__right">
+            {game.lastCounterCard && (() => {
+              const card = CARD_MAP[game.lastCounterCard.cardId];
+              if (!card) return null;
+              const typeSymbol = CARD_TYPE_SYMBOLS[card.type];
+              return (
+                <div className="table-area__counter-wrap">
+                  <div className="table-area__counter-player">{game.lastCounterCard.playerName}</div>
+                  <div
+                    className="hc hc--table hc--counter"
+                    onMouseEnter={() => setHoveredCard(card)}
+                    onMouseLeave={() => setHoveredCard(null)}
+                  >
+                    <span className="hc__top">
+                      {typeSymbol ? <span className="hc__icon" style={{ '--hc-icon': `url(${typeSymbol})` }} /> : null}
+                    </span>
+                    <span className="hc__name">{card.name}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Action controls overlay */}

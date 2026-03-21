@@ -385,6 +385,8 @@ export const createInitialGameState = (playerCount = 2, playerNames = [], option
     counterPlayerIndex: null,
     globalEffects: [],
     cardActionState: { freeCardUsed: false, nonFreeCardUsed: false },
+    turnPlayedCards: [],
+    lastCounterCard: null,
     deck: nextDeck,
     discardPile: nextDiscardPile,
     selectedCardDetailId: null,
@@ -789,6 +791,8 @@ const startNextTurn = (state, nextPlayerIndex, baseMessage) => {
     pendingCardAction: null,
     counterPlayerIndex: null,
     cardActionState: { freeCardUsed: false, nonFreeCardUsed: false },
+    turnPlayedCards: [],
+    lastCounterCard: null,
     selectedTargetPlayerId: state.players[findNextOpponentIndex(state.players, resolvedNextPlayerIndex)]?.id ?? state.players[resolvedNextPlayerIndex].id,
     statusMessage: baseMessage,
     momentumSelection: null,
@@ -1027,6 +1031,7 @@ export const actions = {
         players: removeCardFromHand(game.players, game.currentPlayerIndex, cardId),
         discardPile: [...game.discardPile, cardId],
         cardActionState: { ...game.cardActionState, freeCardUsed: true },
+        turnPlayedCards: [...game.turnPlayedCards, cardId],
         selectedCardDetailId: cardId,
         pendingBlindFundCardId: null,
       };
@@ -1065,6 +1070,7 @@ export const actions = {
           momentumTrade: null,
         },
         cardActionState: { ...game.cardActionState, nonFreeCardUsed: true },
+        turnPlayedCards: [...game.turnPlayedCards, cardId],
         selectedCardDetailId: cardId,
       };
       return resolvePendingCardAction(stateWithCard);
@@ -1088,6 +1094,7 @@ export const actions = {
       counterPlayerIndex: (game.currentPlayerIndex + 1) % game.players.length,
       turnPhase: TURN_PHASES.COUNTER,
       cardActionState: { ...game.cardActionState, nonFreeCardUsed: true },
+      turnPlayedCards: [...game.turnPlayedCards, cardId],
       statusMessage: `${card.name}가 사용되었습니다. 다른 플레이어들이 카운터를 사용할 수 있습니다.`,
       selectedCardDetailId: cardId,
     };
@@ -1124,6 +1131,7 @@ export const actions = {
       players: removeCardFromHand(game.players, game.counterPlayerIndex, cardId),
       discardPile: [...game.discardPile, cardId],
       selectedCardDetailId: cardId,
+      lastCounterCard: { cardId, playerIndex: game.counterPlayerIndex, playerName: counterPlayerState.name },
     };
 
     const counterType = card.effect.counterType;
