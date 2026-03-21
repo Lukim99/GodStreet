@@ -790,31 +790,45 @@
 }
 .table-area__left {
   position: absolute;
-  left: 50%;
+  left: 15%;
   top: 50%;
-  transform: translate(-100%, -50%);
-  margin-left: -20px;
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  align-items: flex-end;
+  align-items: center;
 }
 .table-area__right {
   position: absolute;
-  right: 50%;
+  right: 15%;
   top: 50%;
-  transform: translate(100%, -50%);
-  margin-right: -20px;
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  align-items: flex-start;
+  align-items: center;
+}
+.table-area__played-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.table-area__played-player {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fbbf24;
+}
+.table-area__played-cards {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
 }
 .table-area__counter-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .table-area__counter-player {
   font-size: 14px;
@@ -822,8 +836,8 @@
   color: #93c5fd;
 }
 .hc--table {
-  width: 100px;
-  height: 70px;
+  width: 110px;
+  height: 75px;
   cursor: default;
   animation: cardPop 0.3s ease-out;
 }

@@ -990,6 +990,7 @@ export const actions = {
       counterPlayerIndex: (game.currentPlayerIndex + 1) % game.players.length,
       turnPhase: TURN_PHASES.COUNTER,
       cardActionState: { ...game.cardActionState, nonFreeCardUsed: true },
+      turnPlayedCards: [...game.turnPlayedCards, cardId],
       statusMessage: `${card.name}가 사용되었습니다. 다른 플레이어들이 카운터를 사용할 수 있습니다.`,
       selectedCardDetailId: cardId,
       pendingTargetSelection: null,

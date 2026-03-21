@@ -283,30 +283,37 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
           
           {/* Left side: played cards this turn */}
           <div className="table-area__left">
-            {(game.turnPlayedCards || []).map((cardId, idx) => {
-              const card = CARD_MAP[cardId];
-              if (!card) return null;
-              const typeClass = {
-                [CARD_TYPES.ATTACK]: 'hc--attack',
-                [CARD_TYPES.COUNTER]: 'hc--counter',
-                [CARD_TYPES.FREE]: 'hc--free',
-                [CARD_TYPES.BLACK_SWAN]: 'hc--black-swan',
-              }[card.type] || '';
-              const typeSymbol = CARD_TYPE_SYMBOLS[card.type];
-              return (
-                <div
-                  key={`played-${idx}`}
-                  className={`hc hc--table ${typeClass}`}
-                  onMouseEnter={() => setHoveredCard(card)}
-                  onMouseLeave={() => setHoveredCard(null)}
-                >
-                  <span className="hc__top">
-                    {typeSymbol ? <span className="hc__icon" style={{ '--hc-icon': `url(${typeSymbol})` }} /> : null}
-                  </span>
-                  <span className="hc__name">{card.name}</span>
+            {(game.turnPlayedCards || []).length > 0 && (
+              <div className="table-area__played-wrap">
+                <div className="table-area__played-player">{currentPlayer.name}</div>
+                <div className="table-area__played-cards">
+                  {(game.turnPlayedCards || []).map((cardId, idx) => {
+                    const card = CARD_MAP[cardId];
+                    if (!card) return null;
+                    const typeClass = {
+                      [CARD_TYPES.ATTACK]: 'hc--attack',
+                      [CARD_TYPES.COUNTER]: 'hc--counter',
+                      [CARD_TYPES.FREE]: 'hc--free',
+                      [CARD_TYPES.BLACK_SWAN]: 'hc--black-swan',
+                    }[card.type] || '';
+                    const typeSymbol = CARD_TYPE_SYMBOLS[card.type];
+                    return (
+                      <div
+                        key={`played-${idx}`}
+                        className={`hc hc--table ${typeClass}`}
+                        onMouseEnter={() => setHoveredCard(card)}
+                        onMouseLeave={() => setHoveredCard(null)}
+                      >
+                        <span className="hc__top">
+                          {typeSymbol ? <span className="hc__icon" style={{ '--hc-icon': `url(${typeSymbol})` }} /> : null}
+                        </span>
+                        <span className="hc__name">{card.name}</span>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
 
           {/* Right side: counter card */}
