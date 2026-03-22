@@ -4,26 +4,14 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
   const [playerName, setPlayerName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [view, setView] = useState('main');
-  const [resultModalOpen, setResultModalOpen] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [maxRounds, setMaxRounds] = useState(10);
   const [startingCash, setStartingCash] = useState(10000);
   const [startingPrice, setStartingPrice] = useState(100);
   const [targetCash, setTargetCash] = useState(100000);
-  const prevResultRef = useRef(null);
   const chatMessagesRef = useRef(null);
   const [playerBubbles, setPlayerBubbles] = useState({});
 
-  useEffect(() => {
-    if (!roomInfo?.lastResult) {
-      prevResultRef.current = null;
-      return;
-    }
-    if (prevResultRef.current !== roomInfo.lastResult) {
-      prevResultRef.current = roomInfo.lastResult;
-      queueMicrotask(() => setResultModalOpen(true));
-    }
-  }, [roomInfo?.lastResult]);
 
   useEffect(() => {
     if (chatMessagesRef.current) {
@@ -50,7 +38,6 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
 
   if (roomInfo) {
     const isHost = myPlayerIndex === 0;
-    const shouldShowResultModal = !!roomInfo.lastResult && resultModalOpen;
     const me = roomInfo.players[myPlayerIndex];
     const allReady = roomInfo.players.slice(1).every((p) => p.ready);
     const canStart = isHost && roomInfo.players.length >= 2 && allReady;
@@ -193,39 +180,6 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
             </div>
           </div>
         </div>
-        {shouldShowResultModal && (
-          <div className="result-modal">
-            <div className="result-modal__backdrop" onClick={() => setResultModalOpen(false)} />
-            <div className="result-modal__dialog">
-              <div className="result-panel">
-                <div className="result-panel__header">
-                  <div>
-                    <div className="result-panel__title">경기 결과</div>
-                    <div className="result-panel__reason">{/* roomInfo.lastResult.reason */}</div>
-                  </div>
-                  <button type="button" className="result-panel__close" onClick={() => setResultModalOpen(false)}>닫기</button>
-                </div>
-                <div className="result-panel__list">
-                  {roomInfo.lastResult.rankings.map((entry, index) => (
-                    <div key={entry.playerIndex} className={`result-row${entry.isWinner ? ' is-winner' : ''}`}>
-                      <div className="result-row__rank">#{index + 1}</div>
-                      <div className="result-row__main">
-                        <div className="result-row__name">{entry.name}{entry.isWinner ? ' 👑' : ''}</div>
-                        <div className="result-row__stats">
-                          <span>총 자산 ${Math.round(entry.totalAssets).toLocaleString()}</span>
-                          <span>주식 {entry.stocks}주</span>
-                          <span>평가금액 ${Math.round(entry.marketValue).toLocaleString()}</span>
-                          <span>평가손익 {entry.profitAmount >= 0 ? '+' : '-'}${Math.abs(Math.round(entry.profitAmount)).toLocaleString()}</span>
-                          <span>현금 ${Math.round(entry.cash).toLocaleString()}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }

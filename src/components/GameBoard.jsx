@@ -51,7 +51,7 @@ function StockChart({ history }) {
   );
 }
 
-function PlayerSidebar({ players, price, currentIdx, myIdx, canTarget, onSelectTarget, playerAnimations }) {
+function PlayerSidebar({ players, price, currentIdx, myIdx, canTarget, onSelectTarget, playerAnimations, isTargeting }) {
   return (
     <aside className="sidebar">
       {players.map((p, i) => {
@@ -61,11 +61,12 @@ function PlayerSidebar({ players, price, currentIdx, myIdx, canTarget, onSelectT
         const profitAmt = m.profitAmount;
         const profitPct = m.profitPercent;
         const clickable = canTarget && !isMe;
+        const isTargetable = isTargeting && !isMe;
         const animation = playerAnimations[p.id] || null;
         return (
           <div
             key={p.id}
-            className={`sb-card${isCurrent ? ' is-turn' : ''}${isMe ? ' is-me' : ''}${clickable ? ' is-clickable' : ''}`}
+            className={`sb-card${isCurrent ? ' is-turn' : ''}${isMe ? ' is-me' : ''}${clickable ? ' is-clickable' : ''}${isTargetable ? ' is-targeting' : ''}`}
             onClick={() => clickable && onSelectTarget(p.id)}
           >
             <div className="sb-card__head">
@@ -104,6 +105,7 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
   const lastPriceMoveRef = useRef(null);
   const prevPlayersRef = useRef(game.players);
   const prevPlayedCardsLenRef = useRef(0);
+  const prevCounterCardRef = useRef(null);
   const bgmStartedRef = useRef(false);
 
   const me = game.players[myPlayerIndex];
@@ -138,6 +140,7 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
 
   const momentumQty = game.momentumSelection?.quantity ?? 1;
   const isMomentumSelecting = canCounter && game.momentumSelection?.cardId;
+  const [momentumInput, setMomentumInput] = useState(momentumQty);
 
   const act = useCallback(
     (name, ...args) => {
@@ -200,6 +203,10 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
   }, [canTrade, game.turnPhase, isMyTurn, me.activeEffects, act]);
 
   useEffect(() => {
+    setMomentumInput(momentumQty);
+  }, [momentumQty]);
+
+  useEffect(() => {
     if (!bgmStartedRef.current) {
       bgmStartedRef.current = true;
       playStartSound();
@@ -222,6 +229,14 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
     }
     prevPlayedCardsLenRef.current = currentLen;
   }, [game.turnPlayedCards]);
+
+  useEffect(() => {
+    const currentCounterCardId = game.lastCounterCard?.cardId;
+    if (currentCounterCardId && currentCounterCardId !== prevCounterCardRef.current) {
+      playSound('pop');
+    }
+    prevCounterCardRef.current = currentCounterCardId;
+  }, [game.lastCounterCard]);
 
   const emptySlots = Math.max(0, MAX_HAND - displayHand.length);
   const maxBuyQty = game.price > 0 ? Math.floor(me.cash / game.price) : 0;
@@ -371,9 +386,21 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
                 {isMomentumSelecting && pendingDirection && (
                   <div className="ctrl-momentum">
                     <span className="ctrl-momentum__label">모멘텀 ({momentumAutoLabel})</span>
-                    <input type="number" min={1} value={momentumQty} onChange={(e) => act('setMomentumSelection', { quantity: Number(e.target.value) })} className="ctrl-input" placeholder="수량" />
+                    <input
+                      type="number"
+                      min={1}
+                      value={momentumInput}
+                      onChange={(e) => setMomentumInput(e.target.value)}
+                      onBlur={(e) => {
+                        const val = Math.max(1, Math.floor(Number(e.target.value) || 1));
+                        setMomentumInput(val);
+                        act('setMomentumSelection', { quantity: val });
+                      }}
+                      className="ctrl-input"
+                      placeholder="수량"
+                    />
                     <span className="ctrl-momentum__unit">주</span>
-                    <button type="button" className={btn('primary')} onClick={() => act('confirmMomentumCounter')}>확정</button>
+                    <button type="button" className={btn('primary')} onClick={() => { onAction('setMomentumSelection', { quantity: Math.max(1, Math.floor(Number(momentumInput) || 1)) }); setTimeout(() => act('confirmMomentumCounter'), 50); }}>확정</button>
                     <button type="button" className={btn('ghost')} onClick={() => act('cancelMomentumCounter')}>취소</button>
                   </div>
                 )}
@@ -455,9 +482,10 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
         price={game.price}
         currentIdx={game.currentPlayerIndex}
         myIdx={myPlayerIndex}
-        canTarget={!!game.pendingTargetSelection}
+        canTarget={!!game.pendingTargetSelection && isMyTurn}
         onSelectTarget={(id) => act('selectTarget', id)}
         playerAnimations={playerAnimations}
+        isTargeting={!!game.pendingTargetSelection && isMyTurn}
       />
     </div>
   );

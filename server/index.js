@@ -137,7 +137,7 @@ io.on('connection', (socket) => {
     const playerIndex = room.players.findIndex((p) => p.socketId === socket.id);
     if (playerIndex === -1) return;
 
-    const allowedAnytime = ['selectTarget', 'selectCardDetail', 'setMomentumSelection'];
+    const allowedAnytime = ['selectTarget', 'selectCardDetail', 'setMomentumSelection', 'confirmMomentumCounter', 'cancelMomentumCounter'];
     if (!allowedAnytime.includes(actionName) && !canPlayerAct(room, playerIndex)) return;
 
     const action = actions[actionName];

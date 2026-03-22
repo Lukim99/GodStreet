@@ -581,6 +581,68 @@ const resolveCardEffect = (state, card, pendingAction = null) => {
     };
   }
 
+  if (card.effect.special === 'bailout') {
+    nextState = {
+      ...nextState,
+      players: nextState.players.map((player, index) =>
+        index === state.currentPlayerIndex ? { ...player, cash: 500 } : player
+      ),
+      statusMessage: '구제금융이 적용되어 보유 현금이 $0으로 탕감되고 $500을 지원받았습니다.',
+    };
+  }
+
+  if (card.effect.special === 'call_option') {
+    const strikePrice = nextState.price * (1 + card.effect.strikePercent / 100);
+    nextState = {
+      ...nextState,
+      players: nextState.players.map((player, index) =>
+        index === state.currentPlayerIndex
+          ? {
+              ...player,
+              cash: player.cash - card.effect.cost,
+              activeEffects: [
+                ...player.activeEffects,
+                { type: 'call_option', strikePrice, payoutPerDollar: card.effect.payoutPerDollar },
+              ],
+            }
+          : player
+      ),
+      statusMessage: `콜옵션 매수: 행사가 $${strikePrice.toFixed(2)} (현재가 +5%)`,
+    };
+  }
+
+  if (card.effect.special === 'put_option') {
+    const strikePrice = nextState.price * (1 - card.effect.strikePercent / 100);
+    nextState = {
+      ...nextState,
+      players: nextState.players.map((player, index) =>
+        index === state.currentPlayerIndex
+          ? {
+              ...player,
+              cash: player.cash - card.effect.cost,
+              activeEffects: [
+                ...player.activeEffects,
+                { type: 'put_option', strikePrice, payoutPerDollar: card.effect.payoutPerDollar },
+              ],
+            }
+          : player
+      ),
+      statusMessage: `풋옵션 매수: 행사가 $${strikePrice.toFixed(2)} (현재가 -5%)`,
+    };
+  }
+
+  if (card.effect.special === 'rumor') {
+    const randomPercent = Math.floor(Math.random() * 401) - 200;
+    const newPrice = Math.max(1, nextState.price * (1 + randomPercent / 10));
+    const symbol = randomPercent >= 0 ? '+' : '';
+    nextState = {
+      ...nextState,
+      price: newPrice,
+      priceHistory: [...nextState.priceHistory, newPrice],
+      statusMessage: `미확인 찌라시! 주가가 ${symbol}${(randomPercent / 10).toFixed(1)}% 변동했습니다.`,
+    };
+  }
+
   if (card.effect.globalEffect) {
     nextState = {
       ...nextState,
@@ -707,10 +769,22 @@ const applyMomentumCounter = (game) => {
     statusMessage: fmtCounter('모멘텀 전략', `${counterName}님 ${qty}주 ${modeLabel} 후 추가로 ${mktSymbol}${mktVal}% 변동`),
   };
 
-  return advanceCounterTurnOrResolve(nextState);
+  return advanceCounterTurnOrResolve(nextState, true);
 };
 
-const advanceCounterTurnOrResolve = (state) => {
+const advanceCounterTurnOrResolve = (state, counterWasUsed = false) => {
+  const pendingCard = state.pendingCardAction ? CARD_MAP[state.pendingCardAction.cardId] : null;
+  const isMarginCall = pendingCard?.effect?.special === 'margin_call';
+  const onlyTargetCanCounter = state.pendingCardAction?.onlyTargetCanCounter;
+  
+  if (onlyTargetCanCounter) {
+    return resolvePendingCardAction(state);
+  }
+  
+  if (counterWasUsed && !isMarginCall) {
+    return resolvePendingCardAction(state);
+  }
+  
   const nextCounterIndex = findNextActivePlayerIndex(state.players, state.counterPlayerIndex);
   if (nextCounterIndex === -1 || nextCounterIndex === state.currentPlayerIndex) {
     return resolvePendingCardAction(state);
@@ -859,22 +933,43 @@ const startNextTurn = (state, nextPlayerIndex, baseMessage) => {
       if (leverageEffect?.extraBoughtShares > 0) {
         nextPlayer = applySellTransaction(nextPlayer, nextState.price, leverageEffect.extraBoughtShares);
       }
+      
+      const callOption = player.activeEffects.find((effect) => effect.type === 'call_option');
+      if (callOption && nextState.price > callOption.strikePrice) {
+        const priceDiff = (nextState.price - callOption.strikePrice);
+        const payout = priceDiff * callOption.payoutPerDollar;
+        nextPlayer = { ...nextPlayer, cash: nextPlayer.cash + payout };
+      }
+      
+      const putOption = player.activeEffects.find((effect) => effect.type === 'put_option');
+      if (putOption && nextState.price < putOption.strikePrice) {
+        const priceDiff = (putOption.strikePrice - nextState.price);
+        const payout = priceDiff * putOption.payoutPerDollar;
+        nextPlayer = { ...nextPlayer, cash: (nextPlayer.cash + payout) };
+      }
+      
       return {
         ...nextPlayer,
         pendingHedgeCompensation: 0,
         activeEffects: nextPlayer.activeEffects.filter(
-          (effect) => effect.type !== 'leverage_until_own_turn_start' && effect.type !== 'hedge_until_trade_phase'
+          (effect) => effect.type !== 'leverage_until_own_turn_start' && effect.type !== 'hedge_until_trade_phase' && effect.type !== 'call_option' && effect.type !== 'put_option'
         ),
       };
     }),
   };
 
+  const uniqueBuffsByPlayer = new Map();
   buffsToRemove.forEach((b) => {
-    if (b.effect.riseMultiplierDelta) {
-      nextState.riseMultiplier = Math.max(0.1, nextState.riseMultiplier - b.effect.riseMultiplierDelta);
+    if (!uniqueBuffsByPlayer.has(b.effect.playedByIndex)) {
+      uniqueBuffsByPlayer.set(b.effect.playedByIndex, b.effect);
     }
-    if (b.effect.fallMultiplierDelta) {
-      nextState.fallMultiplier = Math.max(0.1, nextState.fallMultiplier - b.effect.fallMultiplierDelta);
+  });
+  uniqueBuffsByPlayer.forEach((effect) => {
+    if (effect.riseMultiplierDelta) {
+      nextState.riseMultiplier = Math.max(0.1, nextState.riseMultiplier - effect.riseMultiplierDelta);
+    }
+    if (effect.fallMultiplierDelta) {
+      nextState.fallMultiplier = Math.max(0.1, nextState.fallMultiplier - effect.fallMultiplierDelta);
     }
   });
 
@@ -973,6 +1068,13 @@ export const actions = {
     const card = CARD_MAP[cardId];
     if (!card) return game;
     
+    const targetPlayerIndex = game.players.findIndex((p) => p.id === playerId);
+    const isHostileMa = card.effect?.special === 'hostile_ma';
+    const counterPlayerIndex = isHostileMa ? targetPlayerIndex : (game.currentPlayerIndex + 1) % game.players.length;
+    const statusMsg = isHostileMa 
+      ? `${card.name} 카드가 ${game.players[targetPlayerIndex].name}님에게 사용되었습니다.`
+      : `${card.name} 카드가 사용되었습니다. 다른 플레이어들이 카운터를 사용할 수 있습니다.`;
+    
     return {
       ...game,
       players: removeCardFromHand(game.players, game.currentPlayerIndex, cardId),
@@ -980,19 +1082,20 @@ export const actions = {
       pendingCardAction: {
         cardId,
         playedByIndex: game.currentPlayerIndex,
-        targetPlayerIndex: game.players.findIndex((p) => p.id === playerId),
+        targetPlayerIndex,
         reversedDirection: false,
         cancelled: false,
         premarketTrades: [],
         marginCallBlockedPlayerIndexes: [],
         extraMarketRepeats: 0,
         momentumTrade: null,
+        onlyTargetCanCounter: isHostileMa,
       },
-      counterPlayerIndex: (game.currentPlayerIndex + 1) % game.players.length,
+      counterPlayerIndex,
       turnPhase: TURN_PHASES.COUNTER,
       cardActionState: { ...game.cardActionState, nonFreeCardUsed: true },
       turnPlayedCards: [...game.turnPlayedCards, cardId],
-      statusMessage: `${card.name}가 사용되었습니다. 다른 플레이어들이 카운터를 사용할 수 있습니다.`,
+      statusMessage: statusMsg,
       selectedCardDetailId: cardId,
       pendingTargetSelection: null,
     };
@@ -1021,6 +1124,10 @@ export const actions = {
     if (card.type === 'FREE') {
       if (game.cardActionState.freeCardUsed || game.cardActionState.nonFreeCardUsed) {
         return { ...game, statusMessage: '프리 카드는 공격/블랙스완 전에 1장만 사용할 수 있습니다.' };
+      }
+
+      if (card.effect.special === 'bailout' && currentPlayer.cash >= 0) {
+        return { ...game, statusMessage: '구제금융은 보유 현금이 음수일 때만 사용할 수 있습니다.' };
       }
 
       if (card.effect.special === 'blind_fund' && !discardCardId) {
@@ -1222,7 +1329,7 @@ export const actions = {
         : { ...nextState, statusMessage: '회계 감사는 공격 카드에만 유효합니다.' };
     }
 
-    return advanceCounterTurnOrResolve(nextState);
+    return advanceCounterTurnOrResolve(nextState, true);
   },
   skipCounter: (game) => {
     if (game.turnPhase !== TURN_PHASES.COUNTER || game.counterPlayerIndex === null) return game;
@@ -1235,15 +1342,13 @@ export const actions = {
 
     const player = game.players[game.currentPlayerIndex];
     const leverageEffect = player.activeEffects.find((effect) => effect.type === 'leverage_until_own_turn_start');
-    const extraShares = leverageEffect ? quantity * leverageEffect.multiplier : 0;
+    const extraShares = leverageEffect ? (player.stocks + quantity) * (leverageEffect.multiplier - 1) : 0;
     const totalQuantity = quantity + extraShares;
     const baseCost = quantity * game.price;
-    const totalCost = totalQuantity * game.price;
     const skipTradeEffect = player.activeEffects.some((effect) => effect.type === 'skip_trade_this_turn');
 
     if (skipTradeEffect) return { ...game, statusMessage: '이번 턴은 매매를 건너뛰어야 합니다.' };
-    if (!leverageEffect && player.cash < totalCost) return { ...game, statusMessage: '현금이 부족합니다.' };
-    if (leverageEffect && player.cash < baseCost) return { ...game, statusMessage: '기본 수량 매수를 위한 현금이 부족합니다.' };
+    if (player.cash < baseCost) return { ...game, statusMessage: '현금이 부족합니다.' };
 
     const hedgeResolvedGame = applyPendingHedgeForTradePhase(game);
 
@@ -1254,6 +1359,7 @@ export const actions = {
         const boughtPlayer = applyBuyTransaction(targetPlayer, hedgeResolvedGame.price, totalQuantity);
         return {
           ...boughtPlayer,
+          cash: boughtPlayer.cash + (extraShares * hedgeResolvedGame.price),
           activeEffects: boughtPlayer.activeEffects.map((effect) =>
             effect.type === 'leverage_until_own_turn_start'
               ? { ...effect, extraBoughtShares: (effect.extraBoughtShares || 0) + extraShares }
@@ -1261,7 +1367,7 @@ export const actions = {
           ).filter((effect) => effect.type !== 'skip_trade_this_turn'),
         };
       }),
-      statusMessage: `${player.name}이(가) ${quantity}주를 매수했습니다.${extraShares > 0 ? ` 레버리지로 ${extraShares}주가 추가 매수되었습니다.` : ''}`,
+      statusMessage: `${player.name}이(가) ${quantity}주를 매수했습니다.${extraShares > 0 ? ` 레버리지로 ${extraShares}주가 추가 매수되었습니다. (총 ${player.stocks + totalQuantity}주)` : ''}`,
     };
     const drawn = drawCardsForPlayer(afterTrade.players, afterTrade.deck, afterTrade.discardPile, afterTrade.currentPlayerIndex, 1);
     const nextPlayerIndex = (afterTrade.currentPlayerIndex + 1) % afterTrade.players.length;

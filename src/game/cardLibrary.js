@@ -12,10 +12,14 @@ const describeEffect = (card) => {
   if (card.effect.counterType === COUNTER_CARD_EFFECTS.MOMENTUM) return '행동 카드의 방향을 따라 자신도 매매를 진행한 뒤, 해당 수치만큼 주가를 한 번 더 변동시킵니다.\n공격 카드의 방향이 하락인 경우 매도, 상승인 경우 매수합니다.\n매매가 불가능한 경우 건너뛰기합니다.';
   if (card.effect.special === 'margin_call') return '모든 플레이어의 주식을 강제로 전량 매도합니다.';
   if (card.effect.special === 'hostile_ma') return '대상 1명의 보유 주식 10%를 현재가보다 5% 낮은 가격으로, 현금 보유량과 무관하게 강제 매수합니다.';
-  if (card.effect.special === 'leverage') return `이번 턴 매수한 수량의 ${card.effect.leverageMultiplier}배만큼 매수합니다. 다음 내 턴 시작 시 레버리지 수량만큼 강제 자동 매도됩니다.`;
+  if (card.effect.special === 'leverage') return `이번 턴 매수한 수량의 ${card.effect.leverageMultiplier}배만큼 매수합니다. 다음 자신의 턴 시작 시 레버리지 수량만큼 강제 자동 매도됩니다.`;
   if (card.effect.special === 'dividend') return '즉시 자신이 보유한 주식 1주당 $5의 현금을 획득합니다.';
   if (card.effect.special === 'hedge') return '이번 턴 주가 하락 시, 하락으로 인해 발생한 내 주식 가치 손실분의 50%를 현금으로 보상받습니다.';
   if (card.effect.special === 'blind_fund') return '내 손패에서 1장을 버리고, 덱에서 1장을 새로 뽑습니다.';
+  if (card.effect.special === 'bailout') return '보유 현금이 -일 때만 사용 가능합니다.\n사용 시 보유 현금을 $0으로 탕감받고 추가로 $500을 지원받습니다.';
+  if (card.effect.special === 'call_option') return '$1,000을 사용해 현재 가격의 +5%에 콜옵션을 매수합니다.\n다음 자신의 턴 시작 시 해당 가격보다 주가가 높으면 +$1당 $250을 얻습니다.';
+  if (card.effect.special === 'put_option') return '$1,000을 사용해 현재 가격의 -5%에 풋옵션을 매수합니다.\n다음 자신의 턴 시작 시 해당 가격보다 주가가 낮으면 -$1당 $250을 얻습니다.';
+  if (card.effect.special === 'rumor') return '즉시 주가를 -20%에서 +20% 사이 랜덤으로 변동시킵니다.';
   if (card.effect.special === 'inflation') return '즉시 주가가 +5% 변동합니다.\n자신을 제외한 모든 플레이어의 보유 현금을 5% 차감합니다.';
   if (card.effect.market) {
     const market = card.effect.market;
@@ -64,7 +68,7 @@ export const createCardLibrary = () => {
 
   for (let value = 1; value <= 10; value += 1) {
     cards.push(
-      ...createCardCopies(2, (copy) => ({
+      ...createCardCopies(1, (copy) => ({
         id: `attack_rise_percent_${value}_${copy}`,
         name: `주가 +${value}%`,
         type: CARD_TYPES.ATTACK,
@@ -74,7 +78,7 @@ export const createCardLibrary = () => {
           market: { mode: 'percent', direction: 'up', value, multiplierKey: 'riseMultiplier' },
         },
       })),
-      ...createCardCopies(2, (copy) => ({
+      ...createCardCopies(1, (copy) => ({
         id: `attack_fall_percent_${value}_${copy}`,
         name: `주가 -${value}%`,
         type: CARD_TYPES.ATTACK,
@@ -236,7 +240,18 @@ export const createCardLibrary = () => {
       timing: 'card_phase',
       category: 'free',
       effect: { special: 'blind_fund' },
-    }))
+    })),
+    ...createCardCopies(2, (copy) => ({
+      id: `free_bailout_${copy}`,
+      name: '구제금융',
+      type: CARD_TYPES.FREE,
+      timing: 'card_phase',
+      category: 'free',
+      effect: { special: 'bailout' },
+    })),
+    { id: 'free_call_option_1', name: '콜옵션 매수', type: CARD_TYPES.FREE, timing: 'card_phase', category: 'free', effect: { special: 'call_option', cost: 1000, strikePercent: 5, payoutPerDollar: 250 } },
+    { id: 'free_put_option_1', name: '풋옵션 매수', type: CARD_TYPES.FREE, timing: 'card_phase', category: 'free', effect: { special: 'put_option', cost: 1000, strikePercent: 5, payoutPerDollar: 250 } },
+    { id: 'free_rumor_1', name: '미확인 찌라시', type: CARD_TYPES.FREE, timing: 'card_phase', category: 'free', effect: { special: 'rumor' } }
   );
 
   cards.push(
