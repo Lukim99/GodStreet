@@ -267,7 +267,7 @@ const applyMarketMoveToState = (game, rawNextPrice, sourceName, meta = {}) => {
     const isCurrentTurnPlayer = index === game.currentPlayerIndex;
     if (!hasHedge || !isCurrentTurnPlayer || priceDropAmount <= 0 || player.stocks <= 0) return player;
 
-    const pendingHedgeCompensation = (player.pendingHedgeCompensation || 0) + Math.floor(priceDropAmount * player.stocks * 0.5);
+    const pendingHedgeCompensation = (player.pendingHedgeCompensation || 0) + Math.floor(priceDropAmount * player.stocks * 1.0);
     return {
       ...player,
       pendingHedgeCompensation,
@@ -701,26 +701,26 @@ const resolveCardEffect = (state, card, pendingAction = null) => {
 
 const resolvePendingCardAction = (state) => {
   if (!state.pendingCardAction) {
-    return { ...state, turnPhase: TURN_PHASES.TRADE };
+    return applyPendingHedgeForTradePhase({ ...state, turnPhase: TURN_PHASES.TRADE });
   }
 
   const pendingCard = CARD_MAP[state.pendingCardAction.cardId];
   if (!pendingCard) {
-    return { ...state, pendingCardAction: null, counterPlayerIndex: null, turnPhase: TURN_PHASES.TRADE };
+    return applyPendingHedgeForTradePhase({ ...state, pendingCardAction: null, counterPlayerIndex: null, turnPhase: TURN_PHASES.TRADE });
   }
 
   if (state.pendingCardAction.cancelled) {
-    return {
+    return applyPendingHedgeForTradePhase({
       ...state,
       pendingCardAction: null,
       counterPlayerIndex: null,
       turnPhase: TURN_PHASES.TRADE,
       statusMessage: `${pendingCard.name} 카드가 무효화되었습니다.`,
-    };
+    });
   }
 
   const nextState = resolveCardEffect(state, pendingCard, state.pendingCardAction);
-  return { ...nextState, pendingCardAction: null, counterPlayerIndex: null, turnPhase: TURN_PHASES.TRADE, momentumSelection: null };
+  return applyPendingHedgeForTradePhase({ ...nextState, pendingCardAction: null, counterPlayerIndex: null, turnPhase: TURN_PHASES.TRADE, momentumSelection: null });
 };
 
 const applyMomentumCounter = (game) => {
@@ -1350,16 +1350,14 @@ export const actions = {
     if (skipTradeEffect) return { ...game, statusMessage: '이번 턴은 매매를 건너뛰어야 합니다.' };
     if (player.cash < baseCost) return { ...game, statusMessage: '현금이 부족합니다.' };
 
-    const hedgeResolvedGame = applyPendingHedgeForTradePhase(game);
-
     const afterTrade = {
-      ...hedgeResolvedGame,
-      players: hedgeResolvedGame.players.map((targetPlayer, index) => {
-        if (index !== hedgeResolvedGame.currentPlayerIndex) return targetPlayer;
-        const boughtPlayer = applyBuyTransaction(targetPlayer, hedgeResolvedGame.price, totalQuantity);
+      ...game,
+      players: game.players.map((targetPlayer, index) => {
+        if (index !== game.currentPlayerIndex) return targetPlayer;
+        const boughtPlayer = applyBuyTransaction(targetPlayer, game.price, totalQuantity);
         return {
           ...boughtPlayer,
-          cash: boughtPlayer.cash + (extraShares * hedgeResolvedGame.price),
+          cash: boughtPlayer.cash + (extraShares * game.price),
           activeEffects: boughtPlayer.activeEffects.map((effect) =>
             effect.type === 'leverage_until_own_turn_start'
               ? { ...effect, extraBoughtShares: (effect.extraBoughtShares || 0) + extraShares }
@@ -1383,12 +1381,11 @@ export const actions = {
     if (skipTradeEffect) return { ...game, statusMessage: '이번 턴은 매매를 건너뛰어야 합니다.' };
     if (player.stocks < quantity) return { ...game, statusMessage: '보유 수량보다 많이 매도할 수 없습니다.' };
 
-    const hedgeResolvedGame = applyPendingHedgeForTradePhase(game);
     const afterTrade = {
-      ...hedgeResolvedGame,
-      players: hedgeResolvedGame.players.map((targetPlayer, index) => {
-        if (index !== hedgeResolvedGame.currentPlayerIndex) return targetPlayer;
-        const soldPlayer = applySellTransaction(targetPlayer, hedgeResolvedGame.price, quantity);
+      ...game,
+      players: game.players.map((targetPlayer, index) => {
+        if (index !== game.currentPlayerIndex) return targetPlayer;
+        const soldPlayer = applySellTransaction(targetPlayer, game.price, quantity);
         return {
           ...soldPlayer,
           activeEffects: soldPlayer.activeEffects.filter((effect) => effect.type !== 'skip_trade_this_turn'),
@@ -1403,11 +1400,10 @@ export const actions = {
   },
   skipTrade: (game) => {
     if (game.turnPhase !== TURN_PHASES.TRADE) return game;
-    const hedgeResolvedGame = applyPendingHedgeForTradePhase(game);
     const afterSkip = {
-      ...hedgeResolvedGame,
-      players: hedgeResolvedGame.players.map((player, index) =>
-        index === hedgeResolvedGame.currentPlayerIndex
+      ...game,
+      players: game.players.map((player, index) =>
+        index === game.currentPlayerIndex
           ? { ...player, activeEffects: player.activeEffects.filter((effect) => effect.type !== 'skip_trade_this_turn') }
           : player
       ),

@@ -102,11 +102,13 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
   const [tradeQty, setTradeQty] = useState(10);
   const [hoveredCard, setHoveredCard] = useState(null);
   const [playerAnimations, setPlayerAnimations] = useState({});
+  const [popupMessage, setPopupMessage] = useState(null);
   const lastPriceMoveRef = useRef(null);
   const prevPlayersRef = useRef(game.players);
   const prevPlayedCardsLenRef = useRef(0);
   const prevCounterCardRef = useRef(null);
   const bgmStartedRef = useRef(false);
+  const prevStatusMessageRef = useRef(game.statusMessage);
 
   const me = game.players[myPlayerIndex];
   const currentPlayer = game.players[game.currentPlayerIndex];
@@ -238,6 +240,17 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
     prevCounterCardRef.current = currentCounterCardId;
   }, [game.lastCounterCard]);
 
+  useEffect(() => {
+    if (game.statusMessage && game.statusMessage !== prevStatusMessageRef.current) {
+      setPopupMessage(game.statusMessage);
+      const timer = setTimeout(() => setPopupMessage(null), 2500);
+      prevStatusMessageRef.current = game.statusMessage;
+      return () => clearTimeout(timer);
+    }
+    prevStatusMessageRef.current = game.statusMessage;
+    return undefined;
+  }, [game.statusMessage]);
+
   const emptySlots = Math.max(0, MAX_HAND - displayHand.length);
   const maxBuyQty = game.price > 0 ? Math.floor(me.cash / game.price) : 0;
 
@@ -252,6 +265,12 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
 
   return (
     <div className="board">
+      {/* Popup Message */}
+      {popupMessage && (
+        <div className="popup-message">
+          <div className="popup-message__content">{popupMessage}</div>
+        </div>
+      )}
       {/* ====== LEFT COLUMN ====== */}
       <div className="board__left">
         <div className="status-bar">

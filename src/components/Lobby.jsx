@@ -11,6 +11,15 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
   const [targetCash, setTargetCash] = useState(100000);
   const chatMessagesRef = useRef(null);
   const [playerBubbles, setPlayerBubbles] = useState({});
+  const [resultModalOpen, setResultModalOpen] = useState(false);
+  const shownResultRef = useRef(null);
+
+  useEffect(() => {
+    if (roomInfo?.lastResult && shownResultRef.current !== roomInfo.lastResult) {
+      shownResultRef.current = roomInfo.lastResult;
+      queueMicrotask(() => setResultModalOpen(true));
+    }
+  }, [roomInfo?.lastResult]);
 
 
   useEffect(() => {
@@ -56,8 +65,31 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
       setChatMessage('');
     };
 
+    const lastResult = roomInfo.lastResult;
+
     return (
       <div className="lobby-room">
+        {/* Result Modal */}
+        {resultModalOpen && lastResult && (
+          <div className="result-modal" onClick={() => setResultModalOpen(false)}>
+            <div className="result-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="result-panel__header">
+                <h2 className="result-panel__title">게임 결과</h2>
+                <button className="result-panel__close" onClick={() => setResultModalOpen(false)}>닫기</button>
+              </div>
+              <div className="result-panel__reason">{lastResult.reason}</div>
+              <div className="result-panel__list">
+                {lastResult.rankings.map((r, idx) => (
+                  <div key={idx} className={`result-row${r.isWinner ? ' is-winner' : ''}`}>
+                    <span className="result-row__rank">#{idx + 1}</span>
+                    <span className="result-row__name">{r.name}</span>
+                    <span className="result-row__total">${r.totalAssets.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
         <div className="lobby-room__header">
           <div className="lobby-room__header-left">
             <h1 className="lobby-room__title">GOD STREET</h1>
