@@ -51,13 +51,13 @@ function StockChart({ history }) {
   );
 }
 
-function PlayerSidebar({ players, price, currentIdx, myIdx, canTarget, onSelectTarget, playerAnimations, isTargeting }) {
+function PlayerSidebar({ playerEntries, price, currentIdx, myIdx, canTarget, onSelectTarget, playerAnimations, isTargeting }) {
   return (
     <aside className="sidebar">
-      {players.map((p, i) => {
+      {playerEntries.map(({ player: p, playerIndex }) => {
         const m = getPlayerMetrics(p, price);
-        const isCurrent = i === currentIdx;
-        const isMe = i === myIdx;
+        const isCurrent = playerIndex === currentIdx;
+        const isMe = playerIndex === myIdx;
         const profitAmt = m.profitAmount;
         const profitPct = m.profitPercent;
         const clickable = canTarget && !isMe;
@@ -262,6 +262,27 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
     return game.pendingCardAction.reversedDirection ? (baseDir === 'up' ? 'down' : 'up') : baseDir;
   }, [game.pendingCardAction]);
   const momentumAutoLabel = pendingDirection === 'up' ? '매수' : '매도';
+
+  const playerSidebarEntries = useMemo(() => {
+    const turnOrder = game.turnOrder?.length ? game.turnOrder : game.players.map((_, index) => index);
+    const seen = new Set();
+    const orderedEntries = turnOrder
+      .map((playerIndex) => {
+        if (seen.has(playerIndex)) return null;
+        seen.add(playerIndex);
+        const player = game.players[playerIndex];
+        if (!player) return null;
+        return { player, playerIndex };
+      })
+      .filter(Boolean);
+
+    game.players.forEach((player, playerIndex) => {
+      if (seen.has(playerIndex)) return;
+      orderedEntries.push({ player, playerIndex });
+    });
+
+    return orderedEntries;
+  }, [game.players, game.turnOrder]);
 
   return (
     <div className="board">
@@ -497,7 +518,7 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
 
       {/* ====== RIGHT SIDEBAR ====== */}
       <PlayerSidebar
-        players={game.players}
+        playerEntries={playerSidebarEntries}
         price={game.price}
         currentIdx={game.currentPlayerIndex}
         myIdx={myPlayerIndex}
