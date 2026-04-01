@@ -1344,20 +1344,19 @@ export const actions = {
     const leverageEffect = player.activeEffects.find((effect) => effect.type === 'leverage_until_own_turn_start');
     const extraShares = leverageEffect ? (player.stocks + quantity) * (leverageEffect.multiplier - 1) : 0;
     const totalQuantity = quantity + extraShares;
-    const baseCost = quantity * game.price;
+    const totalCost = totalQuantity * game.price;
     const skipTradeEffect = player.activeEffects.some((effect) => effect.type === 'skip_trade_this_turn');
 
     if (skipTradeEffect) return { ...game, statusMessage: '이번 턴은 매매를 건너뛰어야 합니다.' };
-    if (player.cash < baseCost) return { ...game, statusMessage: '현금이 부족합니다.' };
+    if (player.cash < totalCost) return { ...game, statusMessage: '현금이 부족합니다.' };
 
+    const boughtPlayer = applyBuyTransaction(player, game.price, totalQuantity);
     const afterTrade = {
       ...game,
       players: game.players.map((targetPlayer, index) => {
         if (index !== game.currentPlayerIndex) return targetPlayer;
-        const boughtPlayer = applyBuyTransaction(targetPlayer, game.price, totalQuantity);
         return {
           ...boughtPlayer,
-          cash: boughtPlayer.cash + (extraShares * game.price),
           activeEffects: boughtPlayer.activeEffects.map((effect) =>
             effect.type === 'leverage_until_own_turn_start'
               ? { ...effect, extraBoughtShares: (effect.extraBoughtShares || 0) + extraShares }

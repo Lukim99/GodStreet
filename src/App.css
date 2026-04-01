@@ -2,8 +2,8 @@
 .app-shell { min-height: 100vh; }
 
 /* ===== COLOR HELPERS ===== */
-.clr-up { color: #4ade80; }
-.clr-down { color: #f87171; }
+.clr-up { color: #f87171; }
+.clr-down { color: #60a5fa; }
 
 /* ========================================
    LOBBY (Initial Join/Create)
@@ -1234,11 +1234,11 @@
 .sb-card__cash { font-weight: 800; font-size: 15px; color: #fff; }
 .sb-card__cash.is-up,
 .sb-card__stocks.is-up {
-  color: #4ade80;
+  color: #f87171;
 }
 .sb-card__cash.is-down,
 .sb-card__stocks.is-down {
-  color: #f87171;
+  color: #60a5fa;
 }
 .sb-card__body {
   display: flex;
@@ -1259,8 +1259,8 @@
 }
 .sb-float--cash { top: 18px; }
 .sb-float--stocks { top: 44px; }
-.sb-float.is-up { color: #4ade80; }
-.sb-float.is-down { color: #f87171; }
+.sb-float.is-up { color: #f87171; }
+.sb-float.is-down { color: #60a5fa; }
 
 @keyframes sb-float-drop {
   0% {

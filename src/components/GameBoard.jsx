@@ -35,7 +35,7 @@ function StockChart({ history }) {
       {candles.map((c, i) => {
         const x = i * w + w / 2;
         const isUp = c.close >= c.open;
-        const color = isUp ? '#4ade80' : '#f87171';
+        const color = isUp ? '#f87171' : '#60a5fa';
         const bodyTop = toY(Math.max(c.open, c.close));
         const bodyBottom = toY(Math.min(c.open, c.close));
         const wickTop = toY(c.high);

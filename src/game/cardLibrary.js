@@ -12,7 +12,7 @@ const describeEffect = (card) => {
   if (card.effect.counterType === COUNTER_CARD_EFFECTS.MOMENTUM) return '행동 카드의 방향을 따라 자신도 매매를 진행한 뒤, 해당 수치만큼 주가를 한 번 더 변동시킵니다.\n공격 카드의 방향이 하락인 경우 매도, 상승인 경우 매수합니다.\n매매가 불가능한 경우 건너뛰기합니다.';
   if (card.effect.special === 'margin_call') return '모든 플레이어의 주식을 강제로 전량 매도합니다.';
   if (card.effect.special === 'hostile_ma') return '대상 1명의 보유 주식 10%를 현재가보다 5% 낮은 가격으로, 현금 보유량과 무관하게 강제 매수합니다.';
-  if (card.effect.special === 'leverage') return `이번 턴 매수한 수량의 ${card.effect.leverageMultiplier}배만큼 매수합니다. 다음 자신의 턴 시작 시 레버리지 수량만큼 강제 자동 매도됩니다.`;
+  if (card.effect.special === 'leverage') return `이번 턴 매수 후 보유한 수량의 ${card.effect.leverageMultiplier}배만큼 추가 매수합니다. 다음 자신의 턴 시작 시 레버리지 수량만큼 강제 자동 매도됩니다.`;
   if (card.effect.special === 'dividend') return '즉시 자신이 보유한 주식 1주당 $5의 현금을 획득합니다.';
   if (card.effect.special === 'hedge') return '현재 자신의 턴에 주가가 하락하면, 하락으로 인해 발생한 내 주식 가치 손실분을 현금으로 보상받습니다.';
   if (card.effect.special === 'blind_fund') return '내 손패에서 1장을 버리고, 덱에서 1장을 새로 뽑습니다.';
@@ -160,7 +160,7 @@ export const createCardLibrary = () => {
     })),
     ...createCardCopies(2, (copy) => ({
       id: `attack_stock_split_${copy}`,
-      name: '액면분할',
+      name: '무상증자',
       type: CARD_TYPES.ATTACK,
       timing: 'card_phase',
       category: 'special_attack',
