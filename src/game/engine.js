@@ -93,6 +93,27 @@ const createInitialPlayers = (count = 2, names = [], startingCash = 10000) =>
     isEliminated: false,
   }));
 
+const createTurnOrder = (count = 2) => shuffleArray(Array.from({ length: count }, (_, index) => index));
+const getTurnOrder = (state) => state.turnOrder?.length ? state.turnOrder : state.players.map((_, index) => index);
+const getTurnOrderPosition = (state, playerIndex) => getTurnOrder(state).findIndex((index) => index === playerIndex);
+const findNextTurnOrderPlayerIndex = (state, currentIndex, excludedIndexes = []) => {
+  const turnOrder = getTurnOrder(state);
+  if (!turnOrder.length) return -1;
+
+  const excludedSet = new Set(excludedIndexes);
+  const currentPosition = getTurnOrderPosition(state, currentIndex);
+
+  for (let step = 1; step <= turnOrder.length; step += 1) {
+    const position = currentPosition === -1 ? step - 1 : (currentPosition + step) % turnOrder.length;
+    const nextIndex = turnOrder[position];
+    if (excludedSet.has(nextIndex)) continue;
+    if (!state.players[nextIndex] || state.players[nextIndex].isEliminated) continue;
+    return nextIndex;
+  }
+
+  return -1;
+};
+
 const getOpponentIndexes = (players, playerIndex) => players.map((_, index) => index).filter((index) => index !== playerIndex);
 const findNextOpponentIndex = (players, playerIndex) => getOpponentIndexes(players, playerIndex)[0] ?? playerIndex;
 
@@ -100,15 +121,6 @@ const getActivePlayerIndexes = (state) => state.players
   .map((player, index) => ({ player, index }))
   .filter(({ player }) => !player.isEliminated)
   .map(({ index }) => index);
-
-const findNextActivePlayerIndex = (players, currentIndex) => {
-  if (!players.length) return -1;
-  for (let step = 1; step <= players.length; step += 1) {
-    const nextIndex = (currentIndex + step) % players.length;
-    if (!players[nextIndex].isEliminated) return nextIndex;
-  }
-  return -1;
-};
 
 const createGameResult = (state, reason, winnerIndexes = []) => {
   const rankings = state.players
@@ -287,7 +299,7 @@ const applyMarketMoveToState = (game, rawNextPrice, sourceName, meta = {}) => {
         direction: priceBeforeMove >= 100 ? 'down' : 'up',
         meta,
       },
-      statusMessage: `주가가 $1 이하로 떨어져 상장폐지 되었습니다.`,
+      statusMessage: '주가가 $1 이하로 떨어져 상장폐지 되었습니다.',
     };
   }
 
@@ -303,7 +315,7 @@ const applyMarketMoveToState = (game, rawNextPrice, sourceName, meta = {}) => {
       direction: normalizedNextPrice > priceBeforeMove ? 'up' : normalizedNextPrice < priceBeforeMove ? 'down' : 'flat',
       meta,
     },
-    statusMessage: `매매할 차례입니다.`,
+    statusMessage: '매매할 차례입니다.',
   };
 };
 
@@ -364,6 +376,9 @@ export const createInitialGameState = (playerCount = 2, playerNames = [], option
   let nextPlayers = createInitialPlayers(count, playerNames, startingCash);
   let nextDeck = [...startingDeck];
   let nextDiscardPile = [];
+  const turnOrder = createTurnOrder(count);
+  const firstPlayerIndex = turnOrder[0] ?? 0;
+  const initialTargetIndex = turnOrder[1] ?? firstPlayerIndex;
 
   nextPlayers.forEach((_, playerIndex) => {
     const drawResult = drawCardsForPlayer(nextPlayers, nextDeck, nextDiscardPile, playerIndex, 5);
@@ -378,7 +393,8 @@ export const createInitialGameState = (playerCount = 2, playerNames = [], option
     riseMultiplier: 1.0,
     fallMultiplier: 1.0,
     players: nextPlayers,
-    currentPlayerIndex: 0,
+    turnOrder,
+    currentPlayerIndex: firstPlayerIndex,
     turnPhase: TURN_PHASES.CARD,
     statusMessage: '세력 싸움에 오신걸 환영합니다.',
     pendingCardAction: null,
@@ -390,6 +406,7 @@ export const createInitialGameState = (playerCount = 2, playerNames = [], option
     deck: nextDeck,
     discardPile: nextDiscardPile,
     selectedCardDetailId: null,
+    selectedTargetPlayerId: nextPlayers[initialTargetIndex]?.id ?? nextPlayers[firstPlayerIndex]?.id,
     lastResolvedPriceMove: null,
     momentumSelection: null,
     pendingTargetSelection: null,
@@ -415,7 +432,8 @@ export const sanitizeStateForPlayer = (state, playerIndex) => ({
 export const getTargetPlayerIndex = (state) => {
   const targetIndex = state.players.findIndex((player) => player.id === state.selectedTargetPlayerId);
   if (targetIndex !== -1 && targetIndex !== state.currentPlayerIndex) return targetIndex;
-  return findNextOpponentIndex(state.players, state.currentPlayerIndex);
+  const fallbackTargetIndex = findNextTurnOrderPlayerIndex(state, state.currentPlayerIndex, [state.currentPlayerIndex]);
+  return fallbackTargetIndex !== -1 ? fallbackTargetIndex : findNextOpponentIndex(state.players, state.currentPlayerIndex);
 };
 
 const resolveCardEffect = (state, card, pendingAction = null) => {
@@ -785,8 +803,8 @@ const advanceCounterTurnOrResolve = (state, counterWasUsed = false) => {
     return resolvePendingCardAction(state);
   }
   
-  const nextCounterIndex = findNextActivePlayerIndex(state.players, state.counterPlayerIndex);
-  if (nextCounterIndex === -1 || nextCounterIndex === state.currentPlayerIndex) {
+  const nextCounterIndex = findNextTurnOrderPlayerIndex(state, state.counterPlayerIndex, [state.currentPlayerIndex]);
+  if (nextCounterIndex === -1) {
     return resolvePendingCardAction(state);
   }
   return { 
@@ -843,7 +861,7 @@ export const finalizeGameState = (state) => {
 
 const startNextTurn = (state, nextPlayerIndex, baseMessage) => {
   const resolvedNextPlayerIndex = state.players[nextPlayerIndex]?.isEliminated
-    ? findNextActivePlayerIndex(state.players, nextPlayerIndex)
+    ? findNextTurnOrderPlayerIndex(state, nextPlayerIndex)
     : nextPlayerIndex;
 
   if (resolvedNextPlayerIndex === -1) {
@@ -855,9 +873,12 @@ const startNextTurn = (state, nextPlayerIndex, baseMessage) => {
     };
   }
 
-  const nextRoundNumber = resolvedNextPlayerIndex <= state.currentPlayerIndex
+  const currentTurnOrderPosition = getTurnOrderPosition(state, state.currentPlayerIndex);
+  const nextTurnOrderPosition = getTurnOrderPosition(state, resolvedNextPlayerIndex);
+  const nextRoundNumber = currentTurnOrderPosition !== -1 && nextTurnOrderPosition !== -1 && nextTurnOrderPosition <= currentTurnOrderPosition
     ? state.roundNumber + 1
     : state.roundNumber;
+  const nextTargetPlayerIndex = findNextTurnOrderPlayerIndex(state, resolvedNextPlayerIndex, [resolvedNextPlayerIndex]);
 
   let nextState = {
     ...state,
@@ -868,10 +889,10 @@ const startNextTurn = (state, nextPlayerIndex, baseMessage) => {
     cardActionState: { freeCardUsed: false, nonFreeCardUsed: false },
     turnPlayedCards: [],
     lastCounterCard: null,
-    selectedTargetPlayerId: state.players[findNextOpponentIndex(state.players, resolvedNextPlayerIndex)]?.id ?? state.players[resolvedNextPlayerIndex].id,
+    selectedTargetPlayerId: state.players[nextTargetPlayerIndex]?.id ?? state.players[resolvedNextPlayerIndex].id,
     statusMessage: baseMessage,
     momentumSelection: null,
-    globalEffects: state.globalEffects.filter((effect) => effect.playedByIndex !== nextPlayerIndex),
+    globalEffects: state.globalEffects.filter((effect) => effect.playedByIndex !== resolvedNextPlayerIndex),
     roundNumber: nextRoundNumber,
     finalVolatilityPending: false,
   };
@@ -903,7 +924,7 @@ const startNextTurn = (state, nextPlayerIndex, baseMessage) => {
   const buffsToRemove = [];
   nextState.players.forEach((player, index) => {
     player.activeEffects.forEach((effect) => {
-      if (effect.playedByIndex === nextPlayerIndex && effect.type === 'buff_multipliers') {
+      if (effect.playedByIndex === resolvedNextPlayerIndex && effect.type === 'buff_multipliers') {
         buffsToRemove.push({ playerIndex: index, effect });
       }
     });
@@ -1021,7 +1042,7 @@ export const handlePlayerDisconnect = (state, disconnectedIndex) => {
       };
 
       if (isCurrentPlayer) {
-        const nextIdx = findNextActivePlayerIndex(nextState.players, disconnectedIndex);
+        const nextIdx = findNextTurnOrderPlayerIndex(nextState, disconnectedIndex);
         if (nextIdx !== -1) {
           nextState = startNextTurn(nextState, nextIdx, `${nextState.players[nextIdx].name} 차례입니다.`);
         }
@@ -1036,7 +1057,7 @@ export const handlePlayerDisconnect = (state, disconnectedIndex) => {
   }
 
   if (isCurrentPlayer && !isCounterPhase) {
-    const nextIdx = findNextActivePlayerIndex(nextState.players, disconnectedIndex);
+    const nextIdx = findNextTurnOrderPlayerIndex(nextState, disconnectedIndex);
     if (nextIdx !== -1) {
       nextState = startNextTurn(nextState, nextIdx, `${nextState.players[nextIdx].name} 차례입니다.`);
     }
@@ -1051,7 +1072,7 @@ export const handlePlayerDisconnect = (state, disconnectedIndex) => {
         turnPhase: TURN_PHASES.CARD,
         momentumSelection: null,
       };
-      const nextIdx = findNextActivePlayerIndex(nextState.players, disconnectedIndex);
+      const nextIdx = findNextTurnOrderPlayerIndex(nextState, disconnectedIndex);
       if (nextIdx !== -1) {
         nextState = startNextTurn(nextState, nextIdx, `${nextState.players[nextIdx].name} 차례입니다.`);
       }
@@ -1070,7 +1091,7 @@ export const actions = {
     
     const targetPlayerIndex = game.players.findIndex((p) => p.id === playerId);
     const isHostileMa = card.effect?.special === 'hostile_ma';
-    const counterPlayerIndex = isHostileMa ? targetPlayerIndex : (game.currentPlayerIndex + 1) % game.players.length;
+    const counterPlayerIndex = isHostileMa ? targetPlayerIndex : findNextTurnOrderPlayerIndex(game, game.currentPlayerIndex, [game.currentPlayerIndex]);
     const statusMsg = isHostileMa 
       ? `${card.name} 카드가 ${game.players[targetPlayerIndex].name}님에게 사용되었습니다.`
       : `${card.name} 카드가 사용되었습니다. 다른 플레이어들이 카운터를 사용할 수 있습니다.`;
@@ -1200,7 +1221,7 @@ export const actions = {
         extraMarketRepeats: 0,
         momentumTrade: null,
       },
-      counterPlayerIndex: (game.currentPlayerIndex + 1) % game.players.length,
+      counterPlayerIndex: findNextTurnOrderPlayerIndex(game, game.currentPlayerIndex, [game.currentPlayerIndex]),
       turnPhase: TURN_PHASES.COUNTER,
       cardActionState: { ...game.cardActionState, nonFreeCardUsed: true },
       turnPlayedCards: [...game.turnPlayedCards, cardId],
@@ -1353,22 +1374,23 @@ export const actions = {
     const boughtPlayer = applyBuyTransaction(player, game.price, totalQuantity);
     const afterTrade = {
       ...game,
-      players: game.players.map((targetPlayer, index) => {
-        if (index !== game.currentPlayerIndex) return targetPlayer;
-        return {
-          ...boughtPlayer,
-          activeEffects: boughtPlayer.activeEffects.map((effect) =>
-            effect.type === 'leverage_until_own_turn_start'
-              ? { ...effect, extraBoughtShares: (effect.extraBoughtShares || 0) + extraShares }
-              : effect
-          ).filter((effect) => effect.type !== 'skip_trade_this_turn'),
-          cash: player.cash - totalQuantity * game.price,
-        };
-      }),
+      players: game.players.map((targetPlayer, index) =>
+        index === game.currentPlayerIndex
+          ? {
+              ...boughtPlayer,
+              activeEffects: boughtPlayer.activeEffects.map((effect) =>
+                effect.type === 'leverage_until_own_turn_start'
+                  ? { ...effect, extraBoughtShares: (effect.extraBoughtShares || 0) + extraShares }
+                  : effect
+              ).filter((effect) => effect.type !== 'skip_trade_this_turn'),
+              cash: player.cash - totalQuantity * game.price,
+            }
+          : targetPlayer
+      ),
       statusMessage: `${player.name}이(가) ${quantity}주를 매수했습니다.${extraShares > 0 ? ` 레버리지로 ${extraShares}주가 추가 매수되었습니다. (총 ${player.stocks + totalQuantity}주)` : ''}`,
     };
     const drawn = drawCardsForPlayer(afterTrade.players, afterTrade.deck, afterTrade.discardPile, afterTrade.currentPlayerIndex, 1);
-    const nextPlayerIndex = (afterTrade.currentPlayerIndex + 1) % afterTrade.players.length;
+    const nextPlayerIndex = findNextTurnOrderPlayerIndex(afterTrade, afterTrade.currentPlayerIndex);
     const nextPlayerName = drawn.players[nextPlayerIndex]?.name ?? '다음 플레이어';
     return startNextTurn({ ...afterTrade, players: drawn.players, deck: drawn.deck, discardPile: drawn.discardPile }, nextPlayerIndex, `${nextPlayerName} 차례입니다.`);
   },
@@ -1383,18 +1405,20 @@ export const actions = {
 
     const afterTrade = {
       ...game,
-      players: game.players.map((targetPlayer, index) => {
-        if (index !== game.currentPlayerIndex) return targetPlayer;
-        const soldPlayer = applySellTransaction(targetPlayer, game.price, quantity);
-        return {
-          ...soldPlayer,
-          activeEffects: soldPlayer.activeEffects.filter((effect) => effect.type !== 'skip_trade_this_turn'),
-        };
-      }),
+      players: game.players.map((targetPlayer, index) =>
+        index === game.currentPlayerIndex
+          ? {
+              ...player,
+              activeEffects: player.activeEffects.filter((effect) => effect.type !== 'skip_trade_this_turn'),
+              cash: player.cash + quantity * game.price,
+              stocks: player.stocks - quantity,
+            }
+          : targetPlayer
+      ),
       statusMessage: `${player.name}이(가) ${quantity}주를 매도했습니다.`,
     };
     const drawn = drawCardsForPlayer(afterTrade.players, afterTrade.deck, afterTrade.discardPile, afterTrade.currentPlayerIndex, 1);
-    const nextPlayerIndex = (afterTrade.currentPlayerIndex + 1) % afterTrade.players.length;
+    const nextPlayerIndex = findNextTurnOrderPlayerIndex(afterTrade, afterTrade.currentPlayerIndex);
     const nextPlayerName = drawn.players[nextPlayerIndex]?.name ?? '다음 플레이어';
     return startNextTurn({ ...afterTrade, players: drawn.players, deck: drawn.deck, discardPile: drawn.discardPile }, nextPlayerIndex, `${nextPlayerName} 차례입니다.`);
   },
@@ -1410,7 +1434,7 @@ export const actions = {
       statusMessage: '매매를 건너뛰었습니다.',
     };
     const drawn = drawCardsForPlayer(afterSkip.players, afterSkip.deck, afterSkip.discardPile, afterSkip.currentPlayerIndex, 1);
-    const nextPlayerIndex = (afterSkip.currentPlayerIndex + 1) % afterSkip.players.length;
+    const nextPlayerIndex = findNextTurnOrderPlayerIndex(afterSkip, afterSkip.currentPlayerIndex);
     const nextPlayerName = drawn.players[nextPlayerIndex]?.name ?? '다음 플레이어';
     return startNextTurn({ ...afterSkip, players: drawn.players, deck: drawn.deck, discardPile: drawn.discardPile }, nextPlayerIndex, `${nextPlayerName} 차례입니다.`);
   },
@@ -1429,7 +1453,7 @@ export const actions = {
   drawAndEndTurn: (game) => {
     if (game.turnPhase !== TURN_PHASES.DRAW) return game;
     const drawn = drawCardsForPlayer(game.players, game.deck, game.discardPile, game.currentPlayerIndex, 1);
-    const nextPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+    const nextPlayerIndex = findNextTurnOrderPlayerIndex(game, game.currentPlayerIndex);
     return startNextTurn({ ...game, players: drawn.players, deck: drawn.deck, discardPile: drawn.discardPile }, nextPlayerIndex, `${game.players[game.currentPlayerIndex].name}님이 카드를 1장 뽑고 턴을 종료했습니다.`);
   },
 };
