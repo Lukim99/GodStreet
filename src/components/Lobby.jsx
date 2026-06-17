@@ -32,6 +32,7 @@ const UNIQUE_CARDS = (() => {
 
 export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatMessages, onCreateRoom, onJoinRoom, onStartGame, onToggleReady, onSendChatMessage, onLeaveRoom }) {
   const [deckTab, setDeckTab] = useState('all');
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [view, setView] = useState('main');
@@ -144,7 +145,17 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
               </button>
             )}
           </div>
-          <button type="button" className="lobby-room__btn lobby-room__btn--leave" onClick={onLeaveRoom}>←</button>
+          <div className="lobby-room__header-right">
+            <button
+              type="button"
+              className="lobby-room__btn lobby-room__btn--icon"
+              aria-label="게임 설정"
+              onClick={() => setSettingsOpen(true)}
+            >
+              ⚙
+            </button>
+            <button type="button" className="lobby-room__btn lobby-room__btn--leave" onClick={onLeaveRoom}>←</button>
+          </div>
         </div>
         <div className="lobby-room__body">
           <div className="lobby-room__left">
@@ -197,9 +208,17 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
               </div>
             </div>
           </div>
-          <div className="lobby-room__right">
-            <div className="game-settings">
-              <div className="game-settings__title">게임 설정</div>
+        </div>
+
+        {/* Settings Modal */}
+        {settingsOpen && (
+          <div className="settings-modal" onClick={() => setSettingsOpen(false)}>
+            <div className="game-settings" onClick={(e) => e.stopPropagation()}>
+              <div className="game-settings__header">
+                <div className="game-settings__title">게임 설정</div>
+                <button type="button" className="game-settings__close" onClick={() => setSettingsOpen(false)}>닫기</button>
+              </div>
+              {!isHost && <div className="game-settings__note">방장만 설정을 변경할 수 있습니다.</div>}
               <div className="game-settings__item">
                 <label>최대 라운드</label>
                 <input
@@ -242,7 +261,7 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }

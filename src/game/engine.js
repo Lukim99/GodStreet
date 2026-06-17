@@ -805,14 +805,16 @@ const advanceCounterTurnOrResolve = (state, counterWasUsed = false) => {
   if (counterWasUsed && !isMarginCall) {
     return resolvePendingCardAction(state);
   }
-  
-  const nextCounterIndex = findNextTurnOrderPlayerIndex(state, state.counterPlayerIndex, [state.currentPlayerIndex]);
-  if (nextCounterIndex === -1) {
+
+  // 턴 순서대로 다음 상대에게 카운터 기회를 넘긴다.
+  // 공격자(현재 플레이어)에게 한 바퀴 돌아오면 카운터 단계를 종료하고 효과를 해소한다.
+  const nextCounterIndex = findNextTurnOrderPlayerIndex(state, state.counterPlayerIndex);
+  if (nextCounterIndex === -1 || nextCounterIndex === state.currentPlayerIndex) {
     return resolvePendingCardAction(state);
   }
-  return { 
-    ...state, 
-    counterPlayerIndex: nextCounterIndex
+  return {
+    ...state,
+    counterPlayerIndex: nextCounterIndex,
   };
 };
 
