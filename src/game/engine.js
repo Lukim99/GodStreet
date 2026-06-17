@@ -650,14 +650,17 @@ const resolveCardEffect = (state, card, pendingAction = null) => {
   }
 
   if (card.effect.special === 'rumor') {
-    const randomPercent = Math.floor(Math.random() * 401) - 200;
-    const newPrice = Math.max(1, nextState.price * (1 + randomPercent / 10));
-    const symbol = randomPercent >= 0 ? '+' : '';
+    const randomPercent = Math.floor(Math.random() * 401) - 200; // -200 ~ +200
+    const deltaPercent = randomPercent / 10; // -20.0% ~ +20.0%
+    nextState = applyMarketMoveToState(
+      nextState,
+      nextState.price * (1 + deltaPercent / 100),
+      card.name,
+      { phase: 'rumor', percent: deltaPercent }
+    );
     nextState = {
       ...nextState,
-      price: newPrice,
-      priceHistory: [...nextState.priceHistory, newPrice],
-      statusMessage: `미확인 찌라시! 주가가 ${symbol}${(randomPercent / 10).toFixed(1)}% 변동했습니다.`,
+      statusMessage: `미확인 찌라시! 주가가 ${formatSignedPercent(deltaPercent)} 변동했습니다.`,
     };
   }
 
@@ -897,7 +900,7 @@ const startNextTurn = (state, nextPlayerIndex, baseMessage) => {
     finalVolatilityPending: false,
   };
 
-  if (nextRoundNumber > state.roundNumber) {
+  if (nextRoundNumber > state.roundNumber && nextRoundNumber <= state.maxRounds) {
     const roundShockPercent = getRandomPercentBetween(-10, 10);
     const direction = roundShockPercent > 0 ? 'up' : 'down';
     const multiplier = direction === 'up' ? nextState.riseMultiplier : nextState.fallMultiplier;
@@ -1090,6 +1093,13 @@ export const actions = {
     if (!card) return game;
     
     const targetPlayerIndex = game.players.findIndex((p) => p.id === playerId);
+    if (
+      targetPlayerIndex === -1 ||
+      targetPlayerIndex === game.currentPlayerIndex ||
+      game.players[targetPlayerIndex].isEliminated
+    ) {
+      return { ...game, statusMessage: '유효하지 않은 대상입니다.' };
+    }
     const isHostileMa = card.effect?.special === 'hostile_ma';
     const counterPlayerIndex = isHostileMa ? targetPlayerIndex : findNextTurnOrderPlayerIndex(game, game.currentPlayerIndex, [game.currentPlayerIndex]);
     const statusMsg = isHostileMa 

@@ -1,6 +1,26 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
+const SESSION_KEY = 'godstreet:session';
+
+const loadSession = () => {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveSession = (session) => {
+  try {
+    if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    else localStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* ignore storage errors */
+  }
+};
+
 export default function useSocket() {
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
@@ -15,7 +35,21 @@ export default function useSocket() {
     const socket = io(url, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
-    socket.on('connect', () => setConnected(true));
+    socket.on('connect', () => {
+      setConnected(true);
+      // 저장된 세션이 있으면 자동 재접속 시도
+      const session = loadSession();
+      if (session?.roomId && session?.token) {
+        socket.emit('rejoinRoom', session.roomId, session.token, (res) => {
+          if (res?.error) {
+            saveSession(null);
+          } else {
+            setMyPlayerIndex(res.playerIndex);
+            saveSession({ roomId: res.roomId, token: res.token });
+          }
+        });
+      }
+    });
     socket.on('disconnect', () => setConnected(false));
     socket.on('roomUpdate', (info) => {
       setRoomInfo(info);
@@ -43,7 +77,10 @@ export default function useSocket() {
     setError(null);
     socketRef.current?.emit('createRoom', playerName, (res) => {
       if (res.error) setError(res.error);
-      else setMyPlayerIndex(res.playerIndex);
+      else {
+        setMyPlayerIndex(res.playerIndex);
+        saveSession({ roomId: res.roomId, token: res.token });
+      }
     });
   }, []);
 
@@ -51,7 +88,10 @@ export default function useSocket() {
     setError(null);
     socketRef.current?.emit('joinRoom', roomId.toUpperCase(), playerName, (res) => {
       if (res.error) setError(res.error);
-      else setMyPlayerIndex(res.playerIndex);
+      else {
+        setMyPlayerIndex(res.playerIndex);
+        saveSession({ roomId: res.roomId, token: res.token });
+      }
     });
   }, []);
 
@@ -72,6 +112,7 @@ export default function useSocket() {
   }, []);
 
   const leaveRoom = useCallback(() => {
+    saveSession(null);
     socketRef.current?.disconnect();
     socketRef.current?.connect();
     setRoomInfo(null);

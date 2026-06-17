@@ -1,6 +1,37 @@
 import { useEffect, useState, useRef } from 'react';
+import { CARD_LIBRARY } from '../game/cardLibrary';
+import { CARD_TYPES, CARD_TYPE_LABELS } from '../game/constants';
+
+const CARD_TYPE_SYMBOLS = {
+  [CARD_TYPES.ATTACK]: '/symbols/act.png',
+  [CARD_TYPES.COUNTER]: '/symbols/counter.png',
+  [CARD_TYPES.FREE]: '/symbols/pre.png',
+  [CARD_TYPES.BLACK_SWAN]: '/symbols/blackswan.png',
+};
+const CARD_TYPE_CLASS = {
+  [CARD_TYPES.ATTACK]: 'deck-card--attack',
+  [CARD_TYPES.COUNTER]: 'deck-card--counter',
+  [CARD_TYPES.FREE]: 'deck-card--free',
+  [CARD_TYPES.BLACK_SWAN]: 'deck-card--black-swan',
+};
+const DECK_TYPE_ORDER = [CARD_TYPES.ATTACK, CARD_TYPES.BLACK_SWAN, CARD_TYPES.FREE, CARD_TYPES.COUNTER];
+
+// 동일 이름 카드를 합치고 매수를 세어 도감용 목록을 구성한다.
+const UNIQUE_CARDS = (() => {
+  const map = new Map();
+  CARD_LIBRARY.forEach((card) => {
+    const key = `${card.type}__${card.name}`;
+    const existing = map.get(key);
+    if (existing) existing.count += 1;
+    else map.set(key, { name: card.name, type: card.type, description: card.description, count: 1 });
+  });
+  return [...map.values()].sort(
+    (a, b) => DECK_TYPE_ORDER.indexOf(a.type) - DECK_TYPE_ORDER.indexOf(b.type),
+  );
+})();
 
 export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatMessages, onCreateRoom, onJoinRoom, onStartGame, onToggleReady, onSendChatMessage, onLeaveRoom }) {
+  const [deckTab, setDeckTab] = useState('all');
   const [playerName, setPlayerName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [view, setView] = useState('main');
@@ -334,6 +365,49 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
               <div className="guide__rule">
                 <span><strong>목표 금액</strong>을 현금으로 보유한 플레이어가 나타나면 즉시 게임이 종료됩니다.</span>
               </div>
+            </div>
+          </section>
+
+          <section className="guide__section">
+            <h2 className="guide__section-title">
+              <span className="guide__section-icon">&#128220;</span>
+              카드 도감
+            </h2>
+            <div className="deck-tabs">
+              <button
+                type="button"
+                className={`deck-tab${deckTab === 'all' ? ' is-active' : ''}`}
+                onClick={() => setDeckTab('all')}
+              >
+                전체 ({UNIQUE_CARDS.length})
+              </button>
+              {DECK_TYPE_ORDER.map((type) => {
+                const count = UNIQUE_CARDS.filter((c) => c.type === type).length;
+                if (count === 0) return null;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    className={`deck-tab${deckTab === type ? ' is-active' : ''}`}
+                    onClick={() => setDeckTab(type)}
+                  >
+                    {CARD_TYPE_LABELS[type]} ({count})
+                  </button>
+                );
+              })}
+            </div>
+            <div className="deck-grid">
+              {UNIQUE_CARDS.filter((card) => deckTab === 'all' || card.type === deckTab).map((card) => (
+                <div key={`${card.type}-${card.name}`} className={`deck-card ${CARD_TYPE_CLASS[card.type]}`}>
+                  <div className="deck-card__top">
+                    <span className="deck-card__icon" style={{ '--hc-icon': `url(${CARD_TYPE_SYMBOLS[card.type]})` }} />
+                    <span className="deck-card__name">{card.name}</span>
+                    {card.count > 1 && <span className="deck-card__badge">×{card.count}</span>}
+                  </div>
+                  <span className="deck-card__type">{CARD_TYPE_LABELS[card.type]}</span>
+                  <div className="deck-card__desc">{card.description}</div>
+                </div>
+              ))}
             </div>
           </section>
 

@@ -1,4 +1,5 @@
 import { createServer } from 'http';
+import { randomUUID } from 'crypto';
 import { Server } from 'socket.io';
 import { createInitialGameState, actions, finalizeGameState, sanitizeStateForPlayer, handlePlayerDisconnect } from '../src/game/engine.js';
 
@@ -57,6 +58,25 @@ const canPlayerAct = (room, playerIndex) => {
   return playerIndex === gs.currentPlayerIndex;
 };
 
+const canRunAction = (room, actionName, playerIndex) => {
+  const gs = room.gameState;
+  if (!gs || playerIndex === -1) return false;
+  if (gs.finalVolatilityPending) return false;
+  switch (actionName) {
+    case 'selectCardDetail':
+      // 카드 상세 보기 토글 — 누구나 조회 가능
+      return true;
+    case 'selectTarget':
+      return gs.turnPhase === 'CARD' && playerIndex === gs.currentPlayerIndex;
+    case 'setMomentumSelection':
+    case 'confirmMomentumCounter':
+    case 'cancelMomentumCounter':
+      return gs.turnPhase === 'COUNTER' && playerIndex === gs.counterPlayerIndex;
+    default:
+      return canPlayerAct(room, playerIndex);
+  }
+};
+
 const clearPendingEndTimeout = (room) => {
   if (!room?.pendingEndTimeout) return;
   clearTimeout(room.pendingEndTimeout);
@@ -83,8 +103,9 @@ io.on('connection', (socket) => {
 
   socket.on('createRoom', (playerName, callback) => {
     const roomId = generateRoomId();
+    const token = randomUUID();
     rooms.set(roomId, {
-      players: [{ socketId: socket.id, name: playerName || 'Player1', connected: true, ready: false }],
+      players: [{ socketId: socket.id, token, name: playerName || 'Player1', connected: true, ready: false }],
       gameState: null,
       started: false,
       settings: { maxRounds: 10, startingCash: 10000, startingPrice: 100, targetCash: 100000 },
@@ -94,7 +115,7 @@ io.on('connection', (socket) => {
     });
     socket.join(roomId);
     currentRoomId = roomId;
-    callback({ roomId, playerIndex: 0 });
+    callback({ roomId, playerIndex: 0, token });
     broadcastRoomUpdate(roomId);
   });
 
@@ -105,16 +126,21 @@ io.on('connection', (socket) => {
     if (room.players.length >= 10) return callback({ error: '방이 가득 찼습니다.' });
 
     const idx = room.players.length;
-    room.players.push({ socketId: socket.id, name: playerName || `Player${idx + 1}`, connected: true, ready: false });
+    const token = randomUUID();
+    room.players.push({ socketId: socket.id, token, name: playerName || `Player${idx + 1}`, connected: true, ready: false });
     socket.join(roomId);
     currentRoomId = roomId;
-    callback({ roomId, playerIndex: idx });
+    callback({ roomId, playerIndex: idx, token });
     broadcastRoomUpdate(roomId);
   });
 
   socket.on('startGame', (roomId, options = {}) => {
     const room = rooms.get(roomId);
     if (!room || room.started || room.players.length < 2) return;
+    // 호스트(첫 번째 플레이어)만 시작할 수 있다
+    if (room.players[0]?.socketId !== socket.id) return;
+    // 호스트를 제외한 전원이 준비 완료여야 한다
+    if (!room.players.slice(1).every((p) => p.ready)) return;
     clearPendingEndTimeout(room);
     room.settings = {
       maxRounds: Math.max(5, Math.min(100, Math.floor(Number(options.maxRounds) || room.settings?.maxRounds || 10))),
@@ -137,8 +163,7 @@ io.on('connection', (socket) => {
     const playerIndex = room.players.findIndex((p) => p.socketId === socket.id);
     if (playerIndex === -1) return;
 
-    const allowedAnytime = ['selectTarget', 'selectCardDetail', 'setMomentumSelection', 'confirmMomentumCounter', 'cancelMomentumCounter'];
-    if (!allowedAnytime.includes(actionName) && !canPlayerAct(room, playerIndex)) return;
+    if (!canRunAction(room, actionName, playerIndex)) return;
 
     const action = actions[actionName];
     if (!action) return;
@@ -238,16 +263,25 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('chatMessage', chatMsg);
   });
 
-  socket.on('rejoinRoom', (roomId, playerIndex, callback) => {
+  socket.on('rejoinRoom', (roomId, token, callback) => {
+    const respond = typeof callback === 'function' ? callback : () => {};
     const room = rooms.get(roomId);
-    if (!room || playerIndex < 0 || playerIndex >= room.players.length) {
-      return callback({ error: '재접속 실패' });
+    if (!room || !token) {
+      return respond({ error: '재접속 실패' });
+    }
+    const playerIndex = room.players.findIndex((p) => p.token === token);
+    if (playerIndex === -1) {
+      return respond({ error: '재접속 실패' });
+    }
+    // 이미 다른 소켓이 연결된 자리는 탈취할 수 없다
+    if (room.players[playerIndex].connected && room.players[playerIndex].socketId !== socket.id) {
+      return respond({ error: '이미 접속 중인 플레이어입니다.' });
     }
     room.players[playerIndex].socketId = socket.id;
     room.players[playerIndex].connected = true;
     socket.join(roomId);
     currentRoomId = roomId;
-    callback({ roomId, playerIndex });
+    respond({ roomId, playerIndex, token });
     broadcastRoomUpdate(roomId);
     if (room.started) broadcastGameState(roomId);
   });
