@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { CARD_MAP } from '../game/cardLibrary';
 import { getPlayerMetrics, formatSignedCurrency, formatSignedPercent } from '../game/engine';
-import { CARD_TYPES, COUNTER_CARD_EFFECTS, TURN_PHASES } from '../game/constants';
+import { CARD_TYPES, CARD_TYPE_LABELS, COUNTER_CARD_EFFECTS, TURN_PHASES } from '../game/constants';
 import { playSound, playSoundForPriceChange, playStartSound, startBgm, stopBgm } from '../utils/sound';
 
 const MAX_HAND = 8;
@@ -11,6 +11,12 @@ const CARD_TYPE_SYMBOLS = {
   [CARD_TYPES.COUNTER]: '/symbols/counter.png',
   [CARD_TYPES.FREE]: '/symbols/pre.png',
   [CARD_TYPES.BLACK_SWAN]: '/symbols/blackswan.png',
+};
+const CARD_TYPE_CLASS = {
+  [CARD_TYPES.ATTACK]: 'hc--attack',
+  [CARD_TYPES.COUNTER]: 'hc--counter',
+  [CARD_TYPES.FREE]: 'hc--free',
+  [CARD_TYPES.BLACK_SWAN]: 'hc--black-swan',
 };
 const btn = (v, on = true) => `gb-btn gb-btn--${v}${on ? '' : ' is-off'}`;
 
@@ -103,6 +109,8 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
   const [hoveredCard, setHoveredCard] = useState(null);
   const [playerAnimations, setPlayerAnimations] = useState({});
   const [popupMessage, setPopupMessage] = useState(null);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 820px)').matches);
+  const [modalCard, setModalCard] = useState(null);
   const lastPriceMoveRef = useRef(null);
   const prevPlayersRef = useRef(game.players);
   const prevPlayedCardsLenRef = useRef(0);
@@ -209,6 +217,13 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
   }, [momentumQty]);
 
   useEffect(() => {
+    const mq = window.matchMedia('(max-width: 820px)');
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  useEffect(() => {
     if (!bgmStartedRef.current) {
       bgmStartedRef.current = true;
       playStartSound();
@@ -254,6 +269,25 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
   const emptySlots = Math.max(0, MAX_HAND - displayHand.length);
   const maxBuyQty = game.price > 0 ? Math.floor(me.cash / game.price) : 0;
 
+  // 손패 카드의 상호작용(사용 가능 여부 + 실행)을 한 곳에서 계산한다.
+  const cardInteraction = useCallback(
+    (card) => {
+      if (!card) return { usable: false };
+      const playable = canPlayCards
+        && card.type !== CARD_TYPES.COUNTER
+        && !(card.type === CARD_TYPES.FREE && (game.cardActionState.freeCardUsed || game.cardActionState.nonFreeCardUsed))
+        && !((card.type === CARD_TYPES.ATTACK || card.type === CARD_TYPES.BLACK_SWAN) && game.cardActionState.nonFreeCardUsed);
+      const isBlindFundSelection = isMyTurn && game.pendingBlindFundCardId && card.id !== game.pendingBlindFundCardId;
+      const isCounterCard = canCounter && !isMomentumSelecting && card.type === CARD_TYPES.COUNTER;
+      if (isBlindFundSelection) return { usable: true, label: '이 카드 버리기', run: () => act('playCard', game.pendingBlindFundCardId, card.id) };
+      if (isCounterCard) return { usable: true, label: '사용', run: () => act('useCounterCard', card.id) };
+      if (playable) return { usable: true, label: '사용', run: () => act('playCard', card.id) };
+      return { usable: false };
+    },
+    [canPlayCards, isMyTurn, game.pendingBlindFundCardId, game.cardActionState, canCounter, isMomentumSelecting, act],
+  );
+  const modalInteraction = cardInteraction(modalCard);
+
   const pendingDirection = useMemo(() => {
     if (!game.pendingCardAction) return null;
     const aCard = CARD_MAP[game.pendingCardAction.cardId];
@@ -290,6 +324,33 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
       {popupMessage && (
         <div className="popup-message">
           <div className="popup-message__content">{popupMessage}</div>
+        </div>
+      )}
+      {/* Mobile card detail modal */}
+      {modalCard && (
+        <div className="card-modal" onClick={() => setModalCard(null)}>
+          <div className={`card-modal__panel ${CARD_TYPE_CLASS[modalCard.type] || ''}`} onClick={(e) => e.stopPropagation()}>
+            <div className="card-modal__head">
+              <span className="card-modal__icon" style={{ '--hc-icon': `url(${CARD_TYPE_SYMBOLS[modalCard.type]})` }} />
+              <div className="card-modal__titles">
+                <span className="card-modal__name">{modalCard.name}</span>
+                <span className="card-modal__type">{CARD_TYPE_LABELS[modalCard.type]}</span>
+              </div>
+            </div>
+            <div className="card-modal__desc">{modalCard.description}</div>
+            <div className="card-modal__actions">
+              {modalInteraction.usable && (
+                <button
+                  type="button"
+                  className="card-modal__use"
+                  onClick={() => { modalInteraction.run(); setModalCard(null); }}
+                >
+                  {modalInteraction.label}
+                </button>
+              )}
+              <button type="button" className="card-modal__close" onClick={() => setModalCard(null)}>닫기</button>
+            </div>
+          </div>
         </div>
       )}
       {/* ====== LEFT COLUMN ====== */}
@@ -477,6 +538,10 @@ export default function GameBoard({ game, myPlayerIndex, onAction }) {
                     onMouseEnter={() => setHoveredCard(card)}
                     onMouseLeave={() => setHoveredCard(null)}
                     onClick={() => {
+                      if (isMobile) {
+                        setModalCard(card);
+                        return;
+                      }
                       if (isBlindFundSelection) {
                         act('playCard', game.pendingBlindFundCardId, card.id);
                       } else if (isCounterCard) {
