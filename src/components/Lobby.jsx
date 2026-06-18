@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { CARD_LIBRARY } from '../game/cardLibrary';
 import { CARD_TYPES, CARD_TYPE_LABELS } from '../game/constants';
+import { formatCurrency } from '../game/engine';
 
 const CARD_TYPE_SYMBOLS = {
   [CARD_TYPES.ATTACK]: '/symbols/act.png',
@@ -115,7 +116,7 @@ export default function Lobby({ connected, roomInfo, error, myPlayerIndex, chatM
                   <div key={idx} className={`result-row${r.isWinner ? ' is-winner' : ''}`}>
                     <span className="result-row__rank">#{idx + 1}</span>
                     <span className="result-row__name">{r.name}</span>
-                    <span className="result-row__total">${r.totalAssets.toLocaleString()}</span>
+                    <span className="result-row__total">{formatCurrency(r.totalAssets)}</span>
                   </div>
                 ))}
               </div>

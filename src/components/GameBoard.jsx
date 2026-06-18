@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { CARD_MAP } from '../game/cardLibrary';
-import { getPlayerMetrics, formatSignedCurrency, formatSignedPercent } from '../game/engine';
+import { getPlayerMetrics, formatSignedCurrency, formatSignedPercent, formatCurrency } from '../game/engine';
 import { CARD_TYPES, CARD_TYPE_LABELS, COUNTER_CARD_EFFECTS, TURN_PHASES } from '../game/constants';
 import { playSound, playSoundForPriceChange, playStartSound, startBgm, stopBgm } from '../utils/sound';
 
@@ -77,15 +77,15 @@ function PlayerSidebar({ playerEntries, price, currentIdx, myIdx, canTarget, onS
           >
             <div className="sb-card__head">
               <span className="sb-card__name">{p.name}{isMe ? ' ◆' : ''}</span>
-              <span className={`sb-card__cash${animation?.cashDelta ? ` ${animation.cashDelta > 0 ? 'is-up' : 'is-down'}` : ''}`}>${Math.round(p.cash).toLocaleString()}</span>
+              <span className={`sb-card__cash${animation?.cashDelta ? ` ${animation.cashDelta > 0 ? 'is-up' : 'is-down'}` : ''}`}>{formatCurrency(p.cash)}</span>
             </div>
             <div className="sb-card__body">
               <span className={`sb-card__stocks${animation?.stockDelta ? ` ${animation.stockDelta > 0 ? 'is-up' : 'is-down'}` : ''}`}>보유 주식 {p.stocks}주</span>
-              <span>평가금액 ${m.marketValue.toLocaleString()}</span>
+              <span>평가금액 {formatCurrency(m.marketValue)}</span>
               <span className={profitAmt >= 0 ? 'clr-up' : 'clr-down'}>
                 {formatSignedCurrency(profitAmt)} ({formatSignedPercent(profitPct)})
               </span>
-              <span>총 자산 ${m.totalAssets.toLocaleString()}</span>
+              <span>총 자산 {formatCurrency(m.totalAssets)}</span>
             </div>
             {animation?.cashDelta ? (
               <span className={`sb-float sb-float--cash ${animation.cashDelta > 0 ? 'is-up' : 'is-down'}`}>

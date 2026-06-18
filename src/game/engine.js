@@ -22,6 +22,13 @@ export const formatSignedCurrency = (value) => {
   return '$0';
 };
 
+export const formatCurrency = (value) => {
+  const rounded = Math.round(value);
+  return rounded < 0
+    ? `-$${Math.abs(rounded).toLocaleString()}`
+    : `$${rounded.toLocaleString()}`;
+};
+
 export const formatSignedPercent = (value) => {
   if (value > 0) return `+${value.toFixed(1)}%`;
   if (value < 0) return `${value.toFixed(1)}%`;
